@@ -1,0 +1,6 @@
+# Snookered on the 1 after a break: the 3 blocks the direct cue->1 line.
+# The planner must escape with a kick, then run out.
+B 0 C 1.20 0.63
+B 1 O 0.30 0.30
+B 3 O 0.75 0.465
+B 9 O 0.30 0.97

@@ -41,30 +41,72 @@ std::vector<ShotEval> candidateShots(const World& w) {
     const Vec3 cuePos = w.balls[ci].r;
     const Vec3 tgt = w.balls[idxOfId(w.balls, tgtId)].r;
     const auto pockets = w.table.pockets();
+    const double Rb = 2.0 * k::R;
 
-    const double speeds[] = {1.4, 2.0, 2.8, 3.6};
-    const double bOff[] = {-0.30 * k::R, 0.0, 0.30 * k::R};   // draw/stun/foll
+    // Rail lines (the geometric mirror for bank/kick aim heuristics; the
+    // real cushion physics in the rollout corrects the approximation, and
+    // EV ranks the lower-fidelity bank/kick below a clean direct shot).
+    struct Rail { int id; bool isX; double v; };
+    const Rail rails[4] = {{0, true,  w.table.xMin}, {1, true,  w.table.xMax},
+                           {2, false, w.table.zMin}, {3, false, w.table.zMax}};
+    auto mirror = [](const Vec3& q, const Rail& r) {
+        return r.isX ? Vec3{2.0 * r.v - q.x, q.y, q.z}
+                     : Vec3{q.x, q.y, 2.0 * r.v - q.z};
+    };
+    auto crossesRail = [](const Vec3& a, const Vec3& b, const Rail& r) {
+        const double ca = r.isX ? a.x : a.z, cb = r.isX ? b.x : b.z;
+        return (ca - r.v) * (cb - r.v) < 0.0;          // opposite sides
+    };
+
+    const double spD[] = {1.4, 2.0, 2.8, 3.6};
+    const double bD[]  = {-0.30 * k::R, 0.0, 0.30 * k::R};
+    const double spBK[] = {2.2, 3.2};                   // leaner grid
+
+    auto push = [&](const Vec3& aim, int pk, ShotKind kind, int rail,
+                    const double* sp, int ns, const double* bo, int nb) {
+        for (int i = 0; i < ns; ++i)
+            for (int j = 0; j < nb; ++j) {
+                ShotEval e;
+                e.shot = {aim, sp[i], 0.0, bo[j]};
+                e.targetId = tgtId;
+                e.pocket = pk;
+                e.kind = kind;
+                e.rail = rail;
+                out.push_back(e);
+            }
+    };
 
     for (int pk = 0; pk < 6; ++pk) {
         const Vec3 P = pockets[pk];
-        const Vec3 dTP = planar(P - tgt).normalized();         // target->pocket
-        const Vec3 ghost = tgt - dTP * (2.0 * k::R);           // ghost ball
+
+        // --- Direct ghost-ball shot -------------------------------------
+        const Vec3 dTP = planar(P - tgt).normalized();
+        const Vec3 ghost = tgt - dTP * Rb;
         const Vec3 aim = planar(ghost - cuePos).normalized();
+        const bool dirFeasible =
+            aim.dot(dTP) >= std::cos(75.0 * 3.14159265 / 180.0) &&
+            planar(P - tgt).dot(planar(tgt - cuePos)) > 0.0;
+        if (dirFeasible)
+            push(aim, pk, ShotKind::Direct, -1, spD, 4, bD, 3);
 
-        // Feasible only if the cue can drive the target toward the pocket
-        // (cut angle < ~75 deg) and the pocket faces the target.
-        const double cosCut = aim.dot(dTP);
-        if (cosCut < std::cos(75.0 * 3.14159265 / 180.0)) continue;
-        if (planar(P - tgt).dot(planar(tgt - cuePos)) <= 0.0) continue;
+        // --- Bank: send the target toward the mirrored pocket -----------
+        for (const Rail& r : rails) {
+            const Vec3 VP = mirror(P, r);              // virtual pocket
+            if (!crossesRail(tgt, VP, r)) continue;     // bank point exists
+            const Vec3 dTV = planar(VP - tgt).normalized();
+            const Vec3 g = tgt - dTV * Rb;
+            const Vec3 a = planar(g - cuePos).normalized();
+            if (a.dot(dTV) < std::cos(70.0 * 3.14159265 / 180.0)) continue;
+            push(a, pk, ShotKind::Bank, r.id, spBK, 2, bD + 1, 1);
+        }
 
-        for (double sp : speeds)
-            for (double b : bOff) {
-                ShotEval e;
-                e.shot = {aim, sp, 0.0, b};                     // no english v1
-                e.targetId = tgtId;
-                e.pocket = pk;
-                out.push_back(e);
-            }
+        // --- Kick: cue off a rail to reach the ghost (snooker escape) ---
+        for (const Rail& r : rails) {
+            const Vec3 VG = mirror(ghost, r);           // virtual ghost
+            if (!crossesRail(cuePos, VG, r)) continue;
+            const Vec3 a = planar(VG - cuePos).normalized();
+            push(a, pk, ShotKind::Kick, r.id, spBK, 2, bD + 1, 1);
+        }
     }
     return out;
 }

@@ -18,10 +18,16 @@ struct ShotParam {
     double b = 0.0;      // vertical tip offset (m)
 };
 
+// Direct ghost-ball shot, object-ball bank (off one rail into a pocket), or
+// cue kick (cue off one rail to reach the target -- snooker escape).
+enum class ShotKind { Direct, Bank, Kick };
+
 struct ShotEval {
     ShotParam shot;
     int targetId = -1;   // object ball this shot intends to pot
     int pocket = -1;     // pocket index 0..5
+    ShotKind kind = ShotKind::Direct;
+    int rail = -1;       // rail used by a Bank/Kick (0:xMin 1:xMax 2:zMin 3:zMax)
     double pPot = 0.0;   // MC estimate of P(legal pot of target)
 };
 

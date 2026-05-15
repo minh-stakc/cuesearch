@@ -67,6 +67,50 @@ TEST_CASE("P(pot) calibrates: easy shot beats a thin long one") {
     REQUIRE(pEasy > pHard);
 }
 
+TEST_CASE("kick + bank candidates are generated; direct still preferred") {
+    World w = layout(0.30);                          // clean direct shot
+    auto cands = candidateShots(w);
+    bool hasDirect = false, hasBank = false, hasKick = false;
+    for (const ShotEval& e : cands) {
+        hasDirect |= e.kind == ShotKind::Direct;
+        hasBank   |= e.kind == ShotKind::Bank;
+        hasKick   |= e.kind == ShotKind::Kick;
+        if (e.kind != ShotKind::Direct) REQUIRE(e.rail >= 0);
+    }
+    REQUIRE(hasDirect);
+    REQUIRE(hasBank);
+    REQUIRE(hasKick);
+    // EV must still pick a Direct shot when a clean one exists (no
+    // regression of the emergent "prefer direct" behaviour).
+    ShotEval best = bestShot(w, 48, 7);
+    REQUIRE(best.kind == ShotKind::Direct);
+    REQUIRE(best.pPot > 0.6);
+}
+
+TEST_CASE("snooker: blocked direct line still yields a legal kick option") {
+    World w;
+    Ball cue;  cue.type = BallType::Cue;   cue.id = 0; cue.r = {1.0, R, 0.63};
+    Ball one;  one.type = BallType::Object; one.id = 1; one.r = {2.0, R, 0.63};
+    Ball blk;  blk.type = BallType::Object; blk.id = 5;
+    blk.r = {1.5, R, 0.63};                          // dead on the cue->1 line
+    w.balls = {cue, one, blk};
+
+    auto cands = candidateShots(w);
+    bool kick = false;
+    for (const ShotEval& e : cands)
+        if (e.kind == ShotKind::Kick && e.targetId == 1) kick = true;
+    REQUIRE(kick);                                    // an escape exists
+
+    // The straight direct shot at the 1 is blocked by the 5: a no-noise
+    // direct attempt must foul (wrong ball first), proving the kick is
+    // not redundant.
+    World x = w;
+    cueStrike(x.balls[0], Vec3{1, 0, 0}, 2.5, 0.0, 0.0);
+    ShotOutcome o = simulateShot(x);
+    REQUIRE(o.firstContact == 5);
+    REQUIRE(o.foul == Foul::WrongBallFirst);
+}
+
 TEST_CASE("solver is deterministic for a fixed seed") {
     World w = layout(0.30);
     ShotEval a = bestShot(w, 32, 99);

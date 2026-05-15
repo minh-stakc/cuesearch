@@ -51,6 +51,29 @@ static const char* speedDesc(double v) {
     return v < 1.6 ? "soft" : (v < 2.8 ? "medium" : "firm");
 }
 
+static const char* railName(int r) {
+    switch (r) {
+        case 0: return "left rail";
+        case 1: return "right rail";
+        case 2: return "bottom rail";
+        case 3: return "top rail";
+    }
+    return "rail";
+}
+
+static std::string methodDesc(const ShotEval& s) {
+    std::ostringstream o;
+    if (s.kind == ShotKind::Bank)
+        o << "BANK off the " << railName(s.rail) << " into the "
+          << pocketName(s.pocket);
+    else if (s.kind == ShotKind::Kick)
+        o << "KICK off the " << railName(s.rail) << " (snooker escape) at the "
+          << pocketName(s.pocket);
+    else
+        o << "directly into the " << pocketName(s.pocket);
+    return o.str();
+}
+
 // Compact top-down ASCII map ('C'=cue, digits=ids, 'o'=pocket, '.'=cloth).
 static void printMap(const World& w) {
     const int W = 56, H = 15;
@@ -108,10 +131,10 @@ int main(int argc, char** argv) {
         }
 
         std::printf(
-            "\nShot %d: pot the %d into the %s\n"
+            "\nShot %d: pot the %d %s\n"
             "  cue: %.2f m/s (%s), %s\n"
             "  est. P(pot)=%.2f   plan value (this+continuation)=%.2f\n",
-            shot, p.shot.targetId, pocketName(p.shot.pocket),
+            shot, p.shot.targetId, methodDesc(p.shot).c_str(),
             p.shot.shot.speed, speedDesc(p.shot.shot.speed),
             spinDesc(p.shot.shot.a, p.shot.shot.b).c_str(), p.shot.pPot,
             p.value);
