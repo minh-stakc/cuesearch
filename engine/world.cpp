@@ -43,6 +43,20 @@ double World::simulate(
     const std::function<void(double, const WorldEvent&,
                              const std::vector<Ball>&)>& sink,
     int maxEvents, double horizon) {
+    return run(sink, nullptr, 0.0, maxEvents, horizon);
+}
+
+double World::trace(
+    const std::function<void(double, const std::vector<Ball>&)>& frameSink,
+    double sampleDt, int maxEvents, double horizon) {
+    return run(nullptr, frameSink, sampleDt, maxEvents, horizon);
+}
+
+double World::run(
+    const std::function<void(double, const WorldEvent&,
+                             const std::vector<Ball>&)>& sink,
+    const std::function<void(double, const std::vector<Ball>&)>& frameSink,
+    double sampleDt, int maxEvents, double horizon) {
     const int n = static_cast<int>(balls.size());
     std::vector<Segment> seg(n);
     for (int k = 0; k < n; ++k) seg[k] = beginSegment(balls[k], cloth);
@@ -128,11 +142,24 @@ double World::simulate(
         if (!have || best.t > horizon) break;
 
         const double s = best.t - now;
+
+        // Physically-exact animation frames over (now, best.t): each ball
+        // sampled from its closed-form Segment, so arcs/curves are real.
+        if (frameSink && sampleDt > 0.0) {
+            std::vector<Ball> fr = balls;
+            for (double tau = sampleDt; tau < s; tau += sampleDt) {
+                for (int k = 0; k < n; ++k)
+                    fr[k] = seg[k].at(tau > seg[k].T ? seg[k].T : tau);
+                frameSink(now + tau, fr);
+            }
+        }
+
         now = best.t;
         // Rebase every ball to `now` (exact; closed-form re-anchor).
         for (int k = 0; k < n; ++k) {
             balls[k] = seg[k].at(s > seg[k].T ? seg[k].T : s);
         }
+        if (frameSink) frameSink(now, balls);
 
         // Apply the event (PLACEHOLDER resolutions — replaced CP3/CP5).
         switch (best.type) {

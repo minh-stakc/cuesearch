@@ -40,6 +40,21 @@ public:
         const std::function<void(double, const WorldEvent&,
                                  const std::vector<Ball>&)>& sink = nullptr,
         int maxEvents = 4096, double horizon = 120.0);
+
+    // As simulate(), but additionally emits physically-exact frames every
+    // sampleDt seconds (closed-form Segment::at, so arcs/curves are real,
+    // not interpolated) -- for the visualizer. frameSink(t, balls).
+    double trace(
+        const std::function<void(double, const std::vector<Ball>&)>&
+            frameSink,
+        double sampleDt = 0.01, int maxEvents = 4096, double horizon = 120.0);
+
+private:
+    double run(const std::function<void(double, const WorldEvent&,
+                                        const std::vector<Ball>&)>& sink,
+               const std::function<void(double, const std::vector<Ball>&)>&
+                   frameSink,
+               double sampleDt, int maxEvents, double horizon);
 };
 
 }  // namespace cue
