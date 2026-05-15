@@ -7,6 +7,7 @@
 //
 // For each shot it prints a human description, executes it deterministically
 // (no execution noise), then prints the table after the shot.
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -87,26 +88,49 @@ static std::string methodDesc(const ShotEval& s) {
     return o.str();
 }
 
-// Compact top-down ASCII map ('C'=cue, digits=ids, 'o'=pocket, '.'=cloth).
+// Top-down ASCII map, auto-zoomed to the live balls (aspect-preserved) so a
+// tight rack/cluster renders as a real shape. 'C'=cue, digits=ids,
+// 'o'=pocket, '.'=cloth.
 static void printMap(const World& w) {
-    const int W = 120, H = 30;   // ~2.1 cm/char; resolves a real rack
+    const int W = 90, H = 30;
+    // Frame the OBJECT balls; the cue can be far off (kitchen) and would
+    // otherwise force a zoom-out.
+    double minx = 1e9, maxx = -1e9, minz = 1e9, maxz = -1e9;
+    int n = 0;
+    for (const Ball& b : w.balls) {
+        if (b.pocketed || b.type == BallType::Cue) continue;
+        minx = std::min(minx, b.r.x); maxx = std::max(maxx, b.r.x);
+        minz = std::min(minz, b.r.z); maxz = std::max(maxz, b.r.z);
+        ++n;
+    }
+    if (n == 0) { minx = 0; maxx = w.table.xMax; minz = 0; maxz = w.table.zMax; }
+    double cx = 0.5 * (minx + maxx), cz = 0.5 * (minz + maxz);
+    double spanx = std::max(maxx - minx, 0.20) * 1.18;
+    double spanz = std::max(maxz - minz, 0.10) * 1.30;
+    double P = std::max(spanx / W, spanz / (2.0 * H));
+    double x0 = cx - 0.5 * W * P, z0 = cz - 0.5 * H * (2.0 * P);
+
     std::vector<std::string> g(H, std::string(W, '.'));
-    auto cell = [&](double x, double z, int& c, int& r) {
-        c = static_cast<int>(x / w.table.xMax * (W - 1) + 0.5);
-        r = (H - 1) -
-            static_cast<int>(z / w.table.zMax * (H - 1) + 0.5);  // z up
-        c = c < 0 ? 0 : (c >= W ? W - 1 : c);
-        r = r < 0 ? 0 : (r >= H ? H - 1 : r);
+    auto put = [&](double x, double z, char ch) {
+        int c = static_cast<int>((x - x0) / P + 0.5);
+        int r = (H - 1) - static_cast<int>((z - z0) / (2.0 * P) + 0.5);
+        if (c >= 0 && c < W && r >= 0 && r < H) g[r][c] = ch;
     };
-    int c, r;
-    for (auto& p : w.table.pockets()) { cell(p.x, p.z, c, r); g[r][c] = 'o'; }
+    for (auto& p : w.table.pockets()) put(p.x, p.z, 'o');
+    bool cueShown = false;
     for (const Ball& b : w.balls) {
         if (b.pocketed) continue;
-        cell(b.r.x, b.r.z, c, r);
-        g[r][c] = b.type == BallType::Cue
-                      ? 'C'
-                      : (b.id >= 0 && b.id <= 9 ? char('0' + b.id) : '#');
+        if (b.type == BallType::Cue) {
+            int cc = static_cast<int>((b.r.x - x0) / P + 0.5);
+            int rr = (H - 1) - static_cast<int>((b.r.z - z0) / (2.0 * P) + 0.5);
+            cueShown = cc >= 0 && cc < W && rr >= 0 && rr < H;
+            put(b.r.x, b.r.z, 'C');
+        } else {
+            put(b.r.x, b.r.z, b.id >= 0 && b.id <= 9 ? char('0' + b.id) : '#');
+        }
     }
+    std::printf("    (view %.2f x %.2f m, auto-zoom%s)\n", W * P, H * 2.0 * P,
+                cueShown ? "" : "; cue off-frame");
     std::printf("    +%s+\n", std::string(W, '-').c_str());
     for (auto& row : g) std::printf("    |%s|\n", row.c_str());
     std::printf("    +%s+\n", std::string(W, '-').c_str());
