@@ -1,11 +1,11 @@
-# Positional shape planner — design (commit before code)
+# Positional shape planner - design (commit before code)
 
 ## Goal (defensible at any quality level)
 
 **Explicit positional shape planning: the solver optimises the *leave*
 (where the cue stops), not just whether the current ball is potted.** The
 claim grows with the result; it is true even on a single shot. NOT pitched
-as "the SOTA open-source run-out solver" — that is a research claim we will
+as "the SOTA open-source run-out solver" - that is a research claim we will
 not need to defend.
 
 ## Additive, not a rebuild
@@ -18,7 +18,7 @@ the rest of the project is unharmed. Existing 13 suites stay green.
 ## The algorithmic insight (not brute force)
 
 Do NOT grid-search the ~5-D action space. For each feasible `(ball,
-pocket)` pair the *required cue contact point* is fixed (the ghost ball —
+pocket)` pair the *required cue contact point* is fixed (the ghost ball -
 already computed). The free choice is the **leave**: where the cue ends up.
 So:
 
@@ -26,7 +26,7 @@ So:
 2. For each, pick a small set of **target leave zones** (≈6: spots that
    give a good angle on the *next* legal ball into each of its pockets).
 3. **Solve** for the `(speed, vertical-spin)` that lands the cue nearest a
-   target zone — a 2-D problem. Coordinate descent / a coarse precomputed
+   target zone - a 2-D problem. Coordinate descent / a coarse precomputed
    response surface, polished by a few simulate-and-correct steps.
 
 This is a "shot-shaper that solves for the leave", not a grid sweep.
@@ -34,7 +34,7 @@ This is a "shot-shaper that solves for the leave", not a grid sweep.
 ## Positional value function (cheapest that is NOT a lie)
 
 Value a state `(cue position, balls on table)` by makeability of the next
-legal ball — factoring distance, cut angle, AND occlusion by remaining
+legal ball - factoring distance, cut angle, AND occlusion by remaining
 balls (omitting any of those three would be a lie):
 
 ```
@@ -67,7 +67,7 @@ small). For each survivor, run the leave-target sub-search. Recurse on the
 modal leave, depth ≤ 3. Deterministic per-seed (reuse existing per-rollout
 seeding + parallel infra).
 
-## Gates (pre-committed — do not move)
+## Gates (pre-committed - do not move)
 
 - **Success:** ≥ **60%** full run-out (legally pot 1→9) from ball-in-hand
   on the 1, on a clean spread rack, **100** noisy trials.
@@ -82,12 +82,44 @@ recursively*; integration is harsher than the isolated unit gates. Before
 building on it, assert the engine reproduces known **leaves** (post-shot
 cue resting position) from first principles:
 
-- Stun, full hit: cue ends on the tangent line (⊥ to object path) — verify
+- Stun, full hit: cue ends on the tangent line (⊥ to object path) - verify
   cue final position direction and that it ~stops near contact.
 - Follow / draw on a straight shot: cue rolls forward / backward along the
   shot line by the analytic roll distance `v²/(2 μ_r g)` (±tolerance).
 - Natural-roll single ball: stops at `|v|²/(2 μ_r g)` along travel.
 
 If the engine cannot reproduce these leaves within tolerance, the
-positional solver would hallucinate against its own simulation — surface
+positional solver would hallucinate against its own simulation - surface
 that honestly and reconsider before spending POS-a/b.
+
+---
+
+## OUTCOME (measured, not adjusted)
+
+- **CP-pre: PASSED.** Engine reproduces leaves through the integrated path
+  (roll-stop distance; spin->leave ordering draw<stun<follow; short stun
+  cut -> tangent, align 0.998).
+- **POS-a: PASSED.** shapeShot pots the legal ball, is deterministic, and
+  its leave beats the shape-blind max-pot planner (0.227 vs 0.198 on the
+  3-ball scenario). The defensible claim holds: it DOES optimise the
+  leave, not just the pot.
+- **POS-b: FAILED the >=60% gate.** Run-out rate from ball-in-hand on the
+  1 (clean spread, 100 noisy trials): 0/100, avg 0.62 balls/run,
+  reached-shot-1 100/100. Under realistic stroke noise the bounded shaper
+  cannot reliably pot even the FIRST ball from ball-in-hand (avg < 1),
+  let alone chain a run-out. Below the pre-committed 25% failure
+  threshold.
+
+Decision (per the pre-commitment, goalposts NOT moved): stop. The shape
+planner ships as an OPT-IN library experiment only (solver/shape.h),
+never on a default path; the validated bounded solver stays primary.
+Re-measuring after ad-hoc fixes would be the exact rationalisation this
+pre-commitment exists to prevent.
+
+Why it falls short (honest): run-out-grade positional play needs (1) a
+richer action search (sidespin + fine speed, not coarse coordinate
+descent) and (2) a higher-fidelity engine (cushion/throw error compounds
+across a chain). Both are a separate research-scale effort, out of scope.
+The value here is the measured, honest boundary -- "explicit shape
+planning works one ball ahead but not as a run-out under noise" -- not a
+faked SOTA claim.

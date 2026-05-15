@@ -169,4 +169,32 @@ ShapeResult shapeShot(const World& w, unsigned seed) {
     return out;
 }
 
+PlanShapeResult planShape(const World& w, int depth, unsigned seed) {
+    PlanShapeResult pr;
+    pr.value = 0.0;
+    pr.potsTarget = false;
+    if (legalTarget(w.balls) < 0) { pr.value = 1.0; return pr; }
+
+    ShapeResult s = shapeShot(w, seed);
+    pr.shot = s.shot;
+    pr.potsTarget = s.potsTarget;
+    if (!s.potsTarget) return pr;                  // can't pot the legal ball
+
+    // Follow the modal (noiseless) leave and recurse on the next ball.
+    World after = w;
+    int ci = cueIdx(after.balls);
+    cueStrike(after.balls[ci], s.shot.shot.aim, s.shot.shot.speed,
+              s.shot.shot.a, s.shot.shot.b);
+    simulateShot(after);
+
+    if (legalTarget(after.balls) < 0) {
+        pr.value = 1.0;                            // chain cleared the rack
+    } else if (depth <= 1) {
+        pr.value = posShapeValue(after);           // depth budget reached
+    } else {
+        pr.value = planShape(after, depth - 1, seed + 1).value;
+    }
+    return pr;
+}
+
 }  // namespace cue

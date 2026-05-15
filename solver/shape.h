@@ -22,4 +22,16 @@ struct ShapeResult {
 // Best shape-aware shot for the current legal ball. Deterministic.
 ShapeResult shapeShot(const World& w, unsigned seed = 1);
 
+struct PlanShapeResult {
+    ShotEval shot;        // the shape shot to play now
+    double value;         // chained run-out value (depth-limited), 0..1
+    bool potsTarget;
+};
+
+// Greedy shape policy with a depth-limited chained value: plays shapeShot,
+// follows its modal (noiseless) leave, recurses up to `depth` balls. The
+// shot is the recommendation; the value reflects whether the chain runs
+// the rack out. Deterministic.
+PlanShapeResult planShape(const World& w, int depth = 3, unsigned seed = 1);
+
 }  // namespace cue
