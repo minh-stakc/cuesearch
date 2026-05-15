@@ -58,7 +58,7 @@ std::vector<ShotEval> candidateShots(const World& w) {
         return (ca - r.v) * (cb - r.v) < 0.0;          // opposite sides
     };
 
-    const double spD[] = {1.4, 2.0, 2.8, 3.6};
+    const double spD[] = {1.6, 2.6, 3.4};
     const double bD[]  = {-0.30 * k::R, 0.0, 0.30 * k::R};
     const double spBK[] = {2.2, 3.2};                   // leaner grid
 
@@ -87,7 +87,7 @@ std::vector<ShotEval> candidateShots(const World& w) {
             aim.dot(dTP) >= std::cos(75.0 * 3.14159265 / 180.0) &&
             planar(P - tgt).dot(planar(tgt - cuePos)) > 0.0;
         if (dirFeasible)
-            push(aim, pk, ShotKind::Direct, -1, spD, 4, bD, 3);
+            push(aim, pk, ShotKind::Direct, -1, spD, 3, bD, 3);
 
         // --- Bank: send the target toward the mirrored pocket -----------
         for (const Rail& r : rails) {
@@ -108,6 +108,54 @@ std::vector<ShotEval> candidateShots(const World& w) {
             push(a, pk, ShotKind::Kick, r.id, spBK, 2, bD + 1, 1);
         }
     }
+    return out;
+}
+
+std::vector<ShotEval> safetyCandidates(const World& w) {
+    std::vector<ShotEval> out;
+    const int ci = cueIdx(w.balls);
+    const int tgtId = legalTarget(w.balls);
+    if (ci < 0 || tgtId < 0) return out;
+    const Vec3 cuePos = w.balls[ci].r;
+    const Vec3 tgt = w.balls[idxOfId(w.balls, tgtId)].r;
+
+    auto add = [&](const Vec3& aim, int rail) {
+        ShotEval e;
+        e.shot = {aim, 1.0, 0.0, 0.0};               // soft -> a legal hit
+        e.targetId = tgtId;
+        e.pocket = -1;
+        e.kind = ShotKind::Safety;
+        e.rail = rail;
+        out.push_back(e);
+    };
+
+    // (1) Direct soft contact.
+    add(planar(tgt - cuePos).normalized(), -1);
+
+    // (2) The SINGLE best one-rail kick-safety -- required to legally
+    // contact a SNOOKERED ball (can't reach a blocked ball without a rail).
+    // Pick the crossing rail with the shortest cue->mirrored-target path.
+    // Minimal by design (advisor): one class, no two-rail / lag safeties.
+    struct Rail { int id; bool isX; double v; };
+    const Rail rails[4] = {{0, true,  w.table.xMin}, {1, true,  w.table.xMax},
+                           {2, false, w.table.zMin}, {3, false, w.table.zMax}};
+    int bestRail = -1;
+    double bestLen = 1e30;
+    Vec3 bestAim;
+    for (const Rail& r : rails) {
+        const Vec3 VT = r.isX ? Vec3{2.0 * r.v - tgt.x, tgt.y, tgt.z}
+                              : Vec3{tgt.x, tgt.y, 2.0 * r.v - tgt.z};
+        const double ca = r.isX ? cuePos.x : cuePos.z;
+        const double cb = r.isX ? VT.x : VT.z;
+        if ((ca - r.v) * (cb - r.v) >= 0.0) continue;  // no rail crossing
+        const double len = planar(VT - cuePos).norm();
+        if (len < bestLen) {
+            bestLen = len;
+            bestRail = r.id;
+            bestAim = planar(VT - cuePos).normalized();
+        }
+    }
+    if (bestRail >= 0) add(bestAim, bestRail);
     return out;
 }
 

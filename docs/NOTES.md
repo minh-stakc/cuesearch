@@ -31,6 +31,23 @@ The interview-relevant part of this project is not any single physics gate
 - **Dropped a pitch claim honestly.** pooltool won't install on Windows →
   removed the differential-test line rather than paper over it; validation
   stands on measured data + invariants (the stronger basis). — `8ae80ef`
+- **Changed the objective, not the heuristics — twice more.** Kicks/banks
+  were added as *candidates*; the EV objective ranks them (direct preferred
+  when clean, kick only when forced — regression-tested). Then the objective
+  itself moved from pot-EV to **win-EV** (2-ply self-play, 3-consecutive-foul
+  terminal, flat ball-in-hand bonus): **safeties emerge** — on the snooker
+  layout the planner switches from a 12% kick (pot-EV) to *play safe*,
+  P(win)=0.75 (win-EV). Same input, see `docs/example_snooker.out`. Safety
+  was never special-cased; the math reconstructs the strategy. Bounded by
+  design: opponent = self-play, 2-ply cap, ball-in-hand = flat +0.25 (not a
+  placement search), 2-foul-warning ignored, position value = best-direct
+  makeability proxy. **These are documented simplifications, deliberately
+  shipped — not silent gaps**; the win-EV *structure* is the contribution.
+- **Caught a per-rollout recursion blow-up** in the win-EV (planRunout was
+  invoked inside every rollout -> exponential). Restructured to tally
+  outcome fractions and evaluate continuation/opponent ONCE per state. A
+  performance bug, root-caused and fixed, not worked around.
+
 - **Pivoted the whole framing on evidence.** Verified-the-gap research
   showed `pooltool` already does fast event-based simulation, so the novelty
   was reframed from "faster sim" (indefensible) to the **multi-shot solver +

@@ -8,6 +8,7 @@
 // For each shot it prints a human description, executes it deterministically
 // (no execution noise), then prints the table after the shot.
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -17,7 +18,7 @@
 #include "core/constants.h"
 #include "engine/cuestrike.h"
 #include "engine/layout.h"
-#include "solver/plan.h"
+#include "solver/winsolve.h"
 
 using namespace cue;
 
@@ -69,6 +70,11 @@ static std::string methodDesc(const ShotEval& s) {
     else if (s.kind == ShotKind::Kick)
         o << "KICK off the " << railName(s.rail) << " (snooker escape) at the "
           << pocketName(s.pocket);
+    else if (s.kind == ShotKind::Safety)
+        o << "play SAFE — legal contact, no pot, deny the opponent"
+          << (s.rail >= 0 ? std::string(" (kick off the ") + railName(s.rail) +
+                                ")"
+                          : "");
     else
         o << "directly into the " << pocketName(s.pocket);
     return o.str();
@@ -100,10 +106,16 @@ static void printMap(const World& w) {
 }
 
 int main(int argc, char** argv) {
-    std::string text, line;
-    if (argc > 1 && std::string(argv[1]) != "-") {
-        std::ifstream f(argv[1]);
-        if (!f) { std::fprintf(stderr, "cannot open %s\n", argv[1]); return 2; }
+    std::string text, path;
+    int foulsOnMe = 0;                 // consecutive fouls already against me
+    for (int i = 1; i < argc; ++i) {
+        std::string a = argv[i];
+        if (a == "--fouls-on-me" && i + 1 < argc) foulsOnMe = std::atoi(argv[++i]);
+        else path = a;
+    }
+    if (!path.empty() && path != "-") {
+        std::ifstream f(path);
+        if (!f) { std::fprintf(stderr, "cannot open %s\n", path.c_str()); return 2; }
         std::ostringstream ss; ss << f.rdbuf(); text = ss.str();
     } else {
         std::ostringstream ss; ss << std::cin.rdbuf(); text = ss.str();
@@ -122,22 +134,24 @@ int main(int argc, char** argv) {
         const int tgt = legalTarget(w.balls);
         if (tgt < 0) { std::printf("\nNo object balls left.\n"); break; }
 
-        PlanResult p = planRunout(w, 2, 24, 4, 2, 7);
-        if (p.shot.targetId < 0 || p.value <= 1e-6) {
-            std::printf("\nShot %d: no makeable shot on the %d "
-                        "(snookered / blocked). Runout ends.\n",
-                        shot, tgt);
+        WinPlan p = planWin(w, foulsOnMe, 14, 3, 7);
+        if (p.shot.targetId < 0) {
+            std::printf("\nNo legal shot available. Turn ends.\n");
             break;
         }
 
         std::printf(
-            "\nShot %d: pot the %d %s\n"
+            "\nShot %d (on %d foul%s): %s\n"
             "  cue: %.2f m/s (%s), %s\n"
-            "  est. P(pot)=%.2f   plan value (this+continuation)=%.2f\n",
-            shot, p.shot.targetId, methodDesc(p.shot).c_str(),
+            "  est. P(pot)=%.2f   P(win the rack)=%.2f\n",
+            shot, foulsOnMe, foulsOnMe == 1 ? "" : "s",
+            (p.shot.kind == ShotKind::Safety
+                 ? methodDesc(p.shot)
+                 : "pot the " + std::to_string(p.shot.targetId) + " " +
+                       methodDesc(p.shot)).c_str(),
             p.shot.shot.speed, speedDesc(p.shot.shot.speed),
             spinDesc(p.shot.shot.a, p.shot.shot.b).c_str(), p.shot.pPot,
-            p.value);
+            p.winProb);
 
         // Snapshot already-down balls so we report only THIS shot's pots
         // (ShotOutcome.pocketed is cumulative over the world state).
@@ -166,14 +180,34 @@ int main(int argc, char** argv) {
         printMap(w);
 
         if (o.won) { std::printf("\nRACK WON (9 potted legally).\n"); break; }
+
         if (o.foul != Foul::None) {
-            std::printf("\nFoul -> runout ends (turn would pass).\n");
+            ++foulsOnMe;
+            if (foulsOnMe >= 3) {
+                std::printf("\nTHIRD CONSECUTIVE FOUL — rack LOST.\n");
+            } else {
+                std::printf("\nFoul — opponent gets ball-in-hand; you are "
+                            "now on %d foul%s. Turn passes.\n",
+                            foulsOnMe, foulsOnMe == 1 ? "" : "s");
+            }
             break;
         }
+
+        foulsOnMe = 0;                       // any legal shot clears the count
         bool potted = false;
         for (int id : o.pocketed) if (id == tgt) potted = true;
+        if (p.shot.kind == ShotKind::Safety) {
+            std::printf(
+                "\nSafe (intended): forgo the pot, deny the opponent. "
+                "P(win)=%.2f is the EXPECTED value under stroke error; the "
+                "line above is one deterministic sample (a blocked nominal "
+                "line can foul on a single sample even when the shot is "
+                "+EV). Turn passes.\n",
+                p.winProb);
+            break;
+        }
         if (!potted) {
-            std::printf("\nMissed the %d -> runout ends.\n", tgt);
+            std::printf("\nMissed the %d (legal) — turn passes.\n", tgt);
             break;
         }
     }

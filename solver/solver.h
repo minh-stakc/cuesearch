@@ -20,7 +20,7 @@ struct ShotParam {
 
 // Direct ghost-ball shot, object-ball bank (off one rail into a pocket), or
 // cue kick (cue off one rail to reach the target -- snooker escape).
-enum class ShotKind { Direct, Bank, Kick };
+enum class ShotKind { Direct, Bank, Kick, Safety };
 
 struct ShotEval {
     ShotParam shot;
@@ -42,6 +42,11 @@ std::vector<ShotEval> candidateShots(const World& w);
 double evaluate(const World& w, const ShotEval& e, int nRollouts,
                 unsigned baseSeed, double aimSigmaRad = 0.009,
                 double speedRelSigma = 0.05);
+
+// Soft legal-contact shots at the legal target, no pocket intent. Safety
+// is NOT special-cased in the objective -- these just become available and
+// the win-probability solver picks them when they beat shooting.
+std::vector<ShotEval> safetyCandidates(const World& w);
 
 // Best single shot for the current legal target. Deterministic given seed.
 ShotEval bestShot(const World& w, int nRollouts = 64, unsigned seed = 1);
