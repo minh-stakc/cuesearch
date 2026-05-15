@@ -144,6 +144,13 @@ static int cueIdx(const std::vector<Ball>& b) {
 // Coarse ball-in-hand: try cue spots behind the legal target toward each
 // pocket; keep the one with the best single-shot pot prob.
 static void placeBallInHand(World& w, int ci, unsigned seed) {
+    // Ball-in-hand: the cue returns to the table. If the foul was a
+    // SCRATCH the cue is flagged pocketed -- not clearing it leaves a
+    // phantom cue and every later shot fouls (endless safe/scratch spiral).
+    w.balls[ci].pocketed = false;
+    w.balls[ci].v = {};
+    w.balls[ci].w = {};
+    w.balls[ci].state = BallState::Stationary;
     const int tgt = legalTarget(w.balls);
     if (tgt < 0) return;
     Vec3 T;
@@ -229,15 +236,19 @@ int main(int argc, char** argv) {
                     w.balls[5].r.x, w.balls[5].r.z,
                     slotId[8], w.balls[9].r.x, w.balls[9].r.z);
         if (!quiet) printMap(w);
-        // Strong-but-human break: hit the 1-ball full, ~9 m/s ball speed.
+        // Real break technique: NOT a dead-full hit (that just spreads
+        // weakly). Aim a hair off the 1's centre so the wing ball is driven
+        // toward a corner, and hit it firm (strong amateur, ~13 m/s ball --
+        // hard, not a pro smash).
         Vec3 apex = w.balls[0].r;
         for (const Ball& b : w.balls)
             if (b.id == 1) apex = b.r;
+        apex.z += (seed & 1 ? 1.0 : -1.0) * 0.30 * k::R;   // slight cut
         Vec3 aim = apex - w.balls[ci].r; aim.y = 0; aim = aim.normalized();
         const double th = nAim(rng) * 0.6, c = std::cos(th), sn = std::sin(th);
         aim = {aim.x * c + aim.z * sn, 0.0, -aim.x * sn + aim.z * c};
-        std::printf("\nPlayer 1 BREAKS (≈ hard amateur, not a pro smash).\n");
-        cueStrike(w.balls[ci], aim, 6.0 * (1.0 + nSpd(rng)), 0.0, 0.0);
+        std::printf("\nPlayer 1 BREAKS (firm strong-amateur break).\n");
+        cueStrike(w.balls[ci], aim, 8.5 * (1.0 + nSpd(rng)), 0.0, 0.0);
         ShotOutcome o = simulateShot(w);
         std::printf("Break -> ");
         bool any = false;

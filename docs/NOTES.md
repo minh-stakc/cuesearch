@@ -59,6 +59,19 @@ The interview-relevant part of this project is not any single physics gate
   pot-EV positional planner for offence and falls back to win-EV/safety
   ONLY when no makeable shot exists. Diagnosed with a controlled layout,
   not hand-waved; the limitation is documented, not hidden.
+- **Two real match bugs found from a user symptom ("we keep scratching/
+  safing on the 1"), fixed; the residual honestly attributed.** (1) On a
+  SCRATCH the cue is flagged `pocketed`; ball-in-hand never cleared it, so
+  every subsequent shot had a phantom (off-table) cue and fouled forever --
+  an endless safe/scratch spiral. Fixed: ball-in-hand un-pockets the cue.
+  (2) The break was a dead-full, no-spin hit that never pocketed and always
+  left a cluttered table; replaced with a firm, slightly-cut strong-amateur
+  break that realistically pots / goes dry / scratches. (3) The remaining
+  behaviour -- pots when handed a good position (ball-in-hand) but bails to
+  safety once it must SET UP the next ball -- is the documented bounded-
+  solver ceiling (no cue-control / positional planning), NOT a bug. It can
+  make balls; it cannot run out. A true positional solver is a separate,
+  much larger build, deliberately out of scope.
 - **Combo / carom** (instant 9-ball win) added as candidates, gated on the
   9 sitting within ~0.3 m of a pocket so they cost nothing in normal
   layouts. Validated: the combo geometry is a real, legal instant win
