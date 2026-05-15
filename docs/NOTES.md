@@ -47,6 +47,18 @@ The interview-relevant part of this project is not any single physics gate
   invoked inside every rollout -> exponential). Restructured to tally
   outcome fractions and evaluate continuation/opponent ONCE per state. A
   performance bug, root-caused and fixed, not worked around.
+- **Caught (via a user-reported symptom) a degeneracy in the bounded
+  win-EV and routed around it honestly.** On multi-ball racks the win-EV
+  refused obvious gimmes and always played safe. Root cause: a pot is
+  valued by *my* continuation = the cheap one-ball makeability proxy
+  (pessimistic, models no cue control), while a safety is valued as
+  `1 - (opponent's equally-pessimistic value)` ≈ high -> safety
+  structurally dominates. This is the documented proxy simplification
+  biting harder than expected; the win-EV is only sound for the
+  *snookered* case it was built for. Fix: `solve` now runs the validated
+  pot-EV positional planner for offence and falls back to win-EV/safety
+  ONLY when no makeable shot exists. Diagnosed with a controlled layout,
+  not hand-waved; the limitation is documented, not hidden.
 - **Combo / carom** (instant 9-ball win) added as candidates, gated on the
   9 sitting within ~0.3 m of a pocket so they cost nothing in normal
   layouts. Validated: the combo geometry is a real, legal instant win

@@ -18,6 +18,7 @@
 #include "core/constants.h"
 #include "engine/cuestrike.h"
 #include "engine/layout.h"
+#include "solver/plan.h"
 #include "solver/winsolve.h"
 
 using namespace cue;
@@ -141,26 +142,45 @@ int main(int argc, char** argv) {
         const int tgt = legalTarget(w.balls);
         if (tgt < 0) { std::printf("\nNo object balls left.\n"); break; }
 
-        WinPlan p = planWin(w, foulsOnMe, 14, 3, 7);
-        if (p.shot.targetId < 0) {
-            std::printf("\nNo legal shot available. Stopping.\n");
-            break;
+        // Offence first: the validated pot-EV positional planner. Only if
+        // it finds NO makeable line (true snooker) do we fall back to the
+        // bounded win-EV/safety planner -- which over-values safety on
+        // multi-ball racks and must not drive normal play.
+        PlanResult pr = planRunout(w, 2, 14, 3, 2, 7);
+        ShotEval chosen;
+        bool safetyMode = false;
+        double winP = 0.0;
+        if (pr.shot.targetId >= 0 && pr.shot.pPot > 0.05) {
+            chosen = pr.shot;                          // shoot (positional)
+        } else {
+            WinPlan wp = planWin(w, foulsOnMe, 14, 3, 7);
+            if (wp.shot.targetId < 0) {
+                std::printf("\nNo legal shot available. Stopping.\n");
+                break;
+            }
+            chosen = wp.shot;                          // snookered -> safety
+            safetyMode = true;
+            winP = wp.winProb;
         }
 
-        std::printf(
-            "\nShot %d (on %d foul%s): %s\n"
-            "  cue: %.2f m/s (%s), %s\n"
-            "  est. P(pot)=%.2f   P(win the rack)=%.2f\n",
-            shot, foulsOnMe, foulsOnMe == 1 ? "" : "s",
-            ((p.shot.kind == ShotKind::Safety ||
-              p.shot.kind == ShotKind::Combo ||
-              p.shot.kind == ShotKind::Carom)
-                 ? methodDesc(p.shot)
-                 : "pot the " + std::to_string(p.shot.targetId) + " " +
-                       methodDesc(p.shot)).c_str(),
-            p.shot.shot.speed, speedDesc(p.shot.shot.speed),
-            spinDesc(p.shot.shot.a, p.shot.shot.b).c_str(), p.shot.pPot,
-            p.winProb);
+        const bool selfDesc = chosen.kind == ShotKind::Safety ||
+                              chosen.kind == ShotKind::Combo ||
+                              chosen.kind == ShotKind::Carom;
+        std::printf("\nShot %d (on %d foul%s): %s\n  cue: %.2f m/s (%s), %s\n",
+                    shot, foulsOnMe, foulsOnMe == 1 ? "" : "s",
+                    (selfDesc ? methodDesc(chosen)
+                              : "pot the " + std::to_string(chosen.targetId) +
+                                    " " + methodDesc(chosen))
+                        .c_str(),
+                    chosen.shot.speed, speedDesc(chosen.shot.speed),
+                    spinDesc(chosen.shot.a, chosen.shot.b).c_str());
+        if (safetyMode)
+            std::printf("  no makeable shot -> SAFETY.  P(win the rack)=%.2f\n",
+                        winP);
+        else
+            std::printf("  est. P(pot)=%.2f   plan value (this+next)=%.2f\n",
+                        chosen.pPot, pr.value);
+
 
         // Snapshot already-down balls so we report only THIS shot's pots
         // (ShotOutcome.pocketed is cumulative over the world state).
@@ -172,8 +192,8 @@ int main(int argc, char** argv) {
             return false;
         };
 
-        cueStrike(w.balls[cueIx], p.shot.shot.aim, p.shot.shot.speed,
-                  p.shot.shot.a, p.shot.shot.b);
+        cueStrike(w.balls[cueIx], chosen.shot.aim, chosen.shot.speed,
+                  chosen.shot.a, chosen.shot.b);
         ShotOutcome o = simulateShot(w);
 
         std::vector<int> justPotted;
@@ -203,7 +223,7 @@ int main(int argc, char** argv) {
             std::printf("\n  (foul — opponent would get ball-in-hand; on %d "
                         "foul%s. Continuing the solved line.)\n",
                         foulsOnMe, foulsOnMe == 1 ? "" : "s");
-        } else if (p.shot.kind == ShotKind::Safety) {
+        } else if (chosen.kind == ShotKind::Safety) {
             std::printf("\n  (safety — legal contact, no pot intended; turn "
                         "would pass. Continuing the solved line.)\n");
             foulsOnMe = 0;
