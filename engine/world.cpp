@@ -6,6 +6,7 @@
 
 #include "core/constants.h"
 #include "core/frame.h"
+#include "engine/resolve_ballball.h"
 #include "math/poly_solvers.h"
 
 namespace cue {
@@ -128,17 +129,9 @@ double World::simulate(
                 else               bl.v.z = -k::E_CUSHION * bl.v.z;
                 break;
             }
-            case EventType::BallBall: {
-                Ball& A = balls[best.i];
-                Ball& B = balls[best.j];
-                Vec3 nrm = (B.r - A.r);
-                nrm.y = 0.0;
-                nrm = nrm.normalized();
-                const double an = A.v.dot(nrm), bn = B.v.dot(nrm);
-                A.v += nrm * (bn - an);          // equal-mass 1D elastic
-                B.v += nrm * (an - bn);
+            case EventType::BallBall:
+                resolveBallBall(balls[best.i], balls[best.j]);  // CP3
                 break;
-            }
         }
         for (int k = 0; k < n; ++k) seg[k] = beginSegment(balls[k]);
 

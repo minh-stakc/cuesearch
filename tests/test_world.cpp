@@ -46,8 +46,11 @@ TEST_CASE("ball-ball collision detected exactly at contact distance") {
             sawCollision = true;
             const Vec3 d = bs[0].r - bs[1].r;
             REQUIRE(d.norm() == Catch::Approx(2.0 * R).margin(1e-7));
-            REQUIRE(bs[1].v.x > 0.1);          // target set in motion
-            REQUIRE(std::fabs(bs[0].v.x) < 1e-6);  // head-on full transfer
+            // Post-CP3 physics: head-on equal-mass, e=0.95 -> target gets
+            // (1+e)/2, cue follows through (1-e)/2 (~2.5%), not a dead stop.
+            REQUIRE(bs[1].v.x > 0.1);                 // target set in motion
+            REQUIRE(bs[0].v.x > 0.0);                 // cue follows through
+            REQUIRE(bs[0].v.x < 0.1 * bs[1].v.x);     // ...but only slightly
         }
     });
     REQUIRE(sawCollision);
