@@ -108,6 +108,35 @@ std::vector<ShotEval> candidateShots(const World& w) {
             push(a, pk, ShotKind::Kick, r.id, spBK, 2, bD + 1, 1);
         }
     }
+
+    // --- Combo / carom on the 9: instant win when the 9 hugs a pocket ----
+    const int nineIx = idxOfId(w.balls, 9);
+    if (tgtId != 9 && nineIx >= 0 && !w.balls[nineIx].pocketed) {
+        const Vec3 nine = w.balls[nineIx].r;
+        const double NEAR = 0.30;                        // "really close"
+        const double follow[] = {0.30 * k::R};
+        for (int pk = 0; pk < 6; ++pk) {
+            const Vec3 P = pockets[pk];
+            if (planar(P - nine).norm() > NEAR) continue;  // 9 not near pocket
+            const Vec3 dNP = planar(P - nine).normalized();
+
+            // Combo: legal ball -> ghost-on-9 -> pocket.
+            const Vec3 gN = nine - dNP * Rb;             // contact point on 9
+            const Vec3 dTg = planar(gN - tgt).normalized();
+            const Vec3 gT = tgt - dTg * Rb;              // ghost on legal ball
+            const Vec3 aimC = planar(gT - cuePos).normalized();
+            if (aimC.dot(dTg) > std::cos(70.0 * 3.14159265 / 180.0) &&
+                planar(P - nine).dot(planar(nine - tgt)) > 0.0)
+                push(aimC, pk, ShotKind::Combo, -1, spBK, 2, bD + 1, 1);
+
+            // Carom: cue legally hits the legal ball, then on into the 9.
+            // Aim the cue's tangent departure (post full-ish hit) at the 9;
+            // heuristic -- the win-EV physics rollout scores it exactly.
+            const Vec3 aimK = planar(nine - cuePos).normalized();
+            if (planar(nine - cuePos).dot(planar(tgt - cuePos)) > 0.0)
+                push(aimK, pk, ShotKind::Carom, -1, spBK, 2, follow, 1);
+        }
+    }
     return out;
 }
 

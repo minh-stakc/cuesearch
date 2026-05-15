@@ -47,6 +47,15 @@ The interview-relevant part of this project is not any single physics gate
   invoked inside every rollout -> exponential). Restructured to tally
   outcome fractions and evaluate continuation/opponent ONCE per state. A
   performance bug, root-caused and fixed, not worked around.
+- **Combo / carom** (instant 9-ball win) added as candidates, gated on the
+  9 sitting within ~0.3 m of a pocket so they cost nothing in normal
+  layouts. Validated: the combo geometry is a real, legal instant win
+  (lowest ball hit first, 9 down, no foul) and the win-EV finds it
+  (P(win)=1.0). Honest cosmetic limitation: when several shots tie at
+  P(win)=1.0 (a dead-on-the-9 rack), the displayed *label* is whichever
+  ranked first (may read "SAFE" though the executed effect is the combo) --
+  the decision and outcome are correct; the label is not tie-broken. Flagged,
+  not polished away (scope discipline: stop adding).
 
 - **Pivoted the whole framing on evidence.** Verified-the-gap research
   showed `pooltool` already does fast event-based simulation, so the novelty

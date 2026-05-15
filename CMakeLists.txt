@@ -87,6 +87,9 @@ target_link_libraries(io_tests PRIVATE cuesearch_solver)
 add_unit_test(winsolve_tests tests/test_winsolve.cpp)
 target_link_libraries(winsolve_tests PRIVATE cuesearch_solver)
 
+add_unit_test(combo_tests tests/test_combo.cpp)
+target_link_libraries(combo_tests PRIVATE cuesearch_solver)
+
 add_executable(bench_solver bench/bench_solver.cpp)
 target_link_libraries(bench_solver PRIVATE cuesearch_solver)
 target_link_options(bench_solver PRIVATE -static -static-libgcc -static-libstdc++)

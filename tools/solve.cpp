@@ -70,6 +70,12 @@ static std::string methodDesc(const ShotEval& s) {
     else if (s.kind == ShotKind::Kick)
         o << "KICK off the " << railName(s.rail) << " (snooker escape) at the "
           << pocketName(s.pocket);
+    else if (s.kind == ShotKind::Combo)
+        o << "COMBO the " << s.targetId << " into the 9 -> the "
+          << pocketName(s.pocket) << " (INSTANT WIN)";
+    else if (s.kind == ShotKind::Carom)
+        o << "CAROM off the " << s.targetId << " into the 9 -> the "
+          << pocketName(s.pocket) << " (INSTANT WIN)";
     else if (s.kind == ShotKind::Safety)
         o << "play SAFE — legal contact, no pot, deny the opponent"
           << (s.rail >= 0 ? std::string(" (kick off the ") + railName(s.rail) +
@@ -145,7 +151,9 @@ int main(int argc, char** argv) {
             "  cue: %.2f m/s (%s), %s\n"
             "  est. P(pot)=%.2f   P(win the rack)=%.2f\n",
             shot, foulsOnMe, foulsOnMe == 1 ? "" : "s",
-            (p.shot.kind == ShotKind::Safety
+            ((p.shot.kind == ShotKind::Safety ||
+              p.shot.kind == ShotKind::Combo ||
+              p.shot.kind == ShotKind::Carom)
                  ? methodDesc(p.shot)
                  : "pot the " + std::to_string(p.shot.targetId) + " " +
                        methodDesc(p.shot)).c_str(),

@@ -20,7 +20,10 @@ struct ShotParam {
 
 // Direct ghost-ball shot, object-ball bank (off one rail into a pocket), or
 // cue kick (cue off one rail to reach the target -- snooker escape).
-enum class ShotKind { Direct, Bank, Kick, Safety };
+// Combo: legal ball -> 9 -> pocket. Carom: cue legally hits the legal ball
+// then caroms into the 9. Both are instant wins (9 down, lowest hit first)
+// and are only generated when the 9 sits near a pocket.
+enum class ShotKind { Direct, Bank, Kick, Safety, Combo, Carom };
 
 struct ShotEval {
     ShotParam shot;
