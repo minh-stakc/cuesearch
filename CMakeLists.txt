@@ -68,9 +68,12 @@ target_link_libraries(invariant_tests PRIVATE cuesearch_engine)
 add_unit_test(game_tests tests/test_game.cpp)
 target_link_libraries(game_tests PRIVATE cuesearch_engine)
 
-add_library(cuesearch_solver STATIC solver/solver.cpp)
+add_library(cuesearch_solver STATIC solver/solver.cpp solver/plan.cpp)
 target_include_directories(cuesearch_solver PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(cuesearch_solver PUBLIC cuesearch_engine)
 
 add_unit_test(solver_tests tests/test_solver.cpp)
 target_link_libraries(solver_tests PRIVATE cuesearch_solver)
+
+add_unit_test(plan_tests tests/test_plan.cpp)
+target_link_libraries(plan_tests PRIVATE cuesearch_solver)
