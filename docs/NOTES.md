@@ -99,3 +99,17 @@ The interview-relevant part of this project is not any single physics gate
   default path), documented the honest boundary. Did NOT move the
   goalposts or "fix-and-re-measure" past the pre-committed stop. Setting a
   falsifiable bar in advance and respecting it is the point.
+- **User-supplied skill-curve calibration anchor, applied honestly.**
+  Centralised execution noise into ONE constant (k::AIM_SIGMA /
+  SPEED_SIGMA) used by solver/winsolve/plan -- a single calibratable
+  knob. Validated the model against the user's anchor (good player:
+  straight shot ~10/10, harder shots lower): with sigma=0.009 the
+  measured curve via CP7's *proven* geometry is pPot 1.00 (straight) ->
+  0.95 -> 0.88 -> 0.82 (steeper), monotone -- straight matches 1.0
+  exactly. Two bespoke calibration harnesses were discarded after they
+  surfaced their own geometry bugs (cue off-table; a straight-shot
+  scratch confound) -- reused CP7's validated layout instead rather than
+  trust a hand-rolled rig. Did NOT force-fit sigma to "0.60 at 90 deg":
+  a literal 90 deg cut is geometrically unpottable (P->0 under any aim
+  model), so that exact endpoint is ill-posed and is documented, not
+  faked. The skill-curve SHAPE is now a regression gate.

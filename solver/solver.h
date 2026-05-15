@@ -6,6 +6,7 @@
 #include <random>
 #include <vector>
 
+#include "core/constants.h"
 #include "engine/game.h"
 #include "engine/world.h"
 
@@ -43,8 +44,8 @@ std::vector<ShotEval> candidateShots(const World& w);
 // the result is bitwise-independent of thread count (deterministic
 // parallelism).
 double evaluate(const World& w, const ShotEval& e, int nRollouts,
-                unsigned baseSeed, double aimSigmaRad = 0.009,
-                double speedRelSigma = 0.05);
+                unsigned baseSeed, double aimSigmaRad = k::AIM_SIGMA,
+                double speedRelSigma = k::SPEED_SIGMA);
 
 // Soft legal-contact shots at the legal target, no pocket intent. Safety
 // is NOT special-cased in the objective -- these just become available and

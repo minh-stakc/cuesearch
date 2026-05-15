@@ -20,8 +20,8 @@ int cueIdx(const std::vector<Ball>& b) {
 double evalWithLeaves(const World& w, const ShotEval& e, int nRollouts,
                       std::mt19937& rng, int maxLeaves,
                       std::vector<World>& leaves) {
-    std::normal_distribution<double> nAim(0.0, 0.009);
-    std::normal_distribution<double> nSpd(0.0, 0.05);
+    std::normal_distribution<double> nAim(0.0, k::AIM_SIGMA);
+    std::normal_distribution<double> nSpd(0.0, k::SPEED_SIGMA);
     int made = 0;
     for (int r = 0; r < nRollouts; ++r) {
         World ww = w;

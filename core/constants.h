@@ -31,6 +31,12 @@ constexpr double CUSHION_H      = 1.4 * R; // contact height 7R/5 (sin=2/5)
 // Ball–table (slate) — for CP5+ jump roadmap
 constexpr double E_TABLE    = 0.50;       // vertical restitution (0.5–0.7)
 
+// Execution-noise model, calibrated to a good player's skill curve
+// (P(pot) ~1.0 dead-straight, ~0.60 at the steepest practical cut).
+// Single source of truth -- solver/winsolve/plan all use these.
+constexpr double AIM_SIGMA   = 0.009;     // cue-aim std dev (rad)
+constexpr double SPEED_SIGMA = 0.05;      // relative speed std dev
+
 constexpr double EPS        = 1e-9;       // generic numeric tolerance
 
 }  // namespace cue::k

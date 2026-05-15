@@ -64,7 +64,7 @@ double posValue(const World& w, unsigned seed) {
 double candidateWin(const World& w, const ShotEval& e, int foulsOnMover,
                     int ply, int nRollouts, int beamK, unsigned seed) {
     std::mt19937 rng(seed * 2654435761u + 7u);
-    std::normal_distribution<double> nAim(0.0, 0.009), nSpd(0.0, 0.05);
+    std::normal_distribution<double> nAim(0.0, k::AIM_SIGMA), nSpd(0.0, k::SPEED_SIGMA);
 
     int nWin = 0, nCont = 0, nMiss = 0, nFoul = 0, nLose = 0;
     World repCont, repMiss, repFoul;

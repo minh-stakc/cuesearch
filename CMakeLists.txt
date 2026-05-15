@@ -96,6 +96,9 @@ target_link_libraries(shape_tests PRIVATE cuesearch_solver)
 add_unit_test(runout_tests tests/test_runout.cpp)
 target_link_libraries(runout_tests PRIVATE cuesearch_solver)
 
+add_unit_test(potcurve_tests tests/test_potcurve.cpp)
+target_link_libraries(potcurve_tests PRIVATE cuesearch_solver)
+
 add_unit_test(combo_tests tests/test_combo.cpp)
 target_link_libraries(combo_tests PRIVATE cuesearch_solver)
 
