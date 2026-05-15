@@ -87,6 +87,9 @@ target_link_libraries(io_tests PRIVATE cuesearch_solver)
 add_unit_test(winsolve_tests tests/test_winsolve.cpp)
 target_link_libraries(winsolve_tests PRIVATE cuesearch_solver)
 
+add_unit_test(leave_tests tests/test_leave.cpp)
+target_link_libraries(leave_tests PRIVATE cuesearch_engine)
+
 add_unit_test(combo_tests tests/test_combo.cpp)
 target_link_libraries(combo_tests PRIVATE cuesearch_solver)
 
