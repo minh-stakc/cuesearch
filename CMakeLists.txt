@@ -28,7 +28,7 @@ target_include_directories(cuesearch_math PUBLIC ${CMAKE_SOURCE_DIR})
 
 add_library(cuesearch_engine STATIC
   engine/motion.cpp engine/cuestrike.cpp engine/world.cpp
-  engine/resolve_ballball.cpp engine/resolve_cushion.cpp)
+  engine/resolve_ballball.cpp engine/resolve_cushion.cpp engine/game.cpp)
 target_include_directories(cuesearch_engine PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(cuesearch_engine PUBLIC cuesearch_math)
 
@@ -61,3 +61,9 @@ target_link_libraries(effects_tests PRIVATE cuesearch_engine)
 
 add_unit_test(cushion_tests tests/test_cushion.cpp)
 target_link_libraries(cushion_tests PRIVATE cuesearch_engine)
+
+add_unit_test(invariant_tests tests/test_invariants.cpp)
+target_link_libraries(invariant_tests PRIVATE cuesearch_engine)
+
+add_unit_test(game_tests tests/test_game.cpp)
+target_link_libraries(game_tests PRIVATE cuesearch_engine)
