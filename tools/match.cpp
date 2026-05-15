@@ -51,6 +51,63 @@ static void printMap(const World& w) {
     std::printf("    +%s+\n", std::string(W, '-').c_str());
 }
 
+// A tight 9-ball diamond on the foot spot: 1 at the apex (toward the
+// breaker), 9 dead centre, the rest random. Small per-ball jitter -> a
+// realistic imperfect-but-tight rack. Cue ball in the kitchen.
+// Prints the rack as the canonical 9-ball diamond so it is unambiguous
+// (the match board is too coarse to resolve a real ~20 cm rack).
+static void printRackDiagram(const int s[9]) {
+    std::printf("        %d\n", s[0]);             // apex (toward breaker)
+    std::printf("      %d   %d\n", s[1], s[2]);
+    std::printf("    %d   %d   %d\n", s[3], s[4], s[5]);   // s[4]=9 (centre)
+    std::printf("      %d   %d\n", s[6], s[7]);
+    std::printf("        %d\n", s[8]);             // back
+}
+
+static World buildRack(std::mt19937& rng, int slotId[9]) {
+    World w;
+    const double R = k::R, s = 2.0 * R * 1.015;        // ~0.9 mm gaps
+    const double pitch = s * 0.86602540378;            // row pitch (sqrt3/2)
+    const double fx = 0.75 * w.table.xMax;             // foot spot
+    const double z0 = 0.5 * w.table.zMax;
+    std::uniform_real_distribution<double> J(-3e-4, 3e-4);   // <=0.3 mm
+
+    struct Slot { double x, z; };
+    std::vector<Slot> slot;
+    slot.push_back({fx, z0});                                   // 0 apex (1)
+    slot.push_back({fx + pitch, z0 - s / 2});                   // 1
+    slot.push_back({fx + pitch, z0 + s / 2});                   // 2
+    slot.push_back({fx + 2 * pitch, z0 - s});                   // 3
+    slot.push_back({fx + 2 * pitch, z0});                       // 4 centre (9)
+    slot.push_back({fx + 2 * pitch, z0 + s});                   // 5
+    slot.push_back({fx + 3 * pitch, z0 - s / 2});               // 6
+    slot.push_back({fx + 3 * pitch, z0 + s / 2});               // 7
+    slot.push_back({fx + 4 * pitch, z0});                       // 8 back
+
+    std::vector<int> rest = {2, 3, 4, 5, 6, 7, 8};
+    std::shuffle(rest.begin(), rest.end(), rng);
+    int id[9];
+    id[0] = 1;
+    id[4] = 9;
+    for (int k = 0, r = 0; k < 9; ++k)
+        if (k != 0 && k != 4) id[k] = rest[r++];
+
+    for (int k = 0; k < 9; ++k) {
+        Ball b;
+        b.type = BallType::Object;
+        b.id = id[k];
+        b.r = {slot[k].x + J(rng), R, slot[k].z + J(rng)};
+        w.balls.push_back(b);
+        slotId[k] = id[k];
+    }
+    Ball cue;
+    cue.type = BallType::Cue;
+    cue.id = 0;
+    cue.r = {0.20 * w.table.xMax, R, z0 + J(rng) * 8.0};        // kitchen
+    w.balls.insert(w.balls.begin(), cue);
+    return w;
+}
+
 static int cueIdx(const std::vector<Ball>& b) {
     for (size_t i = 0; i < b.size(); ++i)
         if (b[i].type == BallType::Cue) return (int)i;
@@ -93,25 +150,15 @@ static void placeBallInHand(World& w, int ci, unsigned seed) {
 int main(int argc, char** argv) {
     std::string text, pathArg;
     unsigned seed = 1;
-    bool quiet = false;
+    bool quiet = false, doBreak = false;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--quiet") quiet = true;
+        else if (a == "--break") doBreak = true;
         else if (!a.empty() && (isdigit((unsigned char)a[0])))
             seed = (unsigned)std::atoi(a.c_str());
         else pathArg = a;
     }
-    if (!pathArg.empty() && pathArg != "-") {
-        std::ifstream f(pathArg);
-        if (!f) { std::fprintf(stderr, "cannot open %s\n", pathArg.c_str()); return 2; }
-        std::ostringstream ss; ss << f.rdbuf(); text = ss.str();
-    } else {
-        std::ostringstream ss; ss << std::cin.rdbuf(); text = ss.str();
-    }
-
-    World w = loadLayout(text);
-    const int ci = cueIdx(w.balls);
-    if (ci < 0) { std::fprintf(stderr, "no cue ball in layout\n"); return 2; }
 
     std::mt19937 rng(seed);
     std::normal_distribution<double> nAim(0.0, 0.009), nSpd(0.0, 0.05);
@@ -120,13 +167,84 @@ int main(int argc, char** argv) {
     int fouls[2] = {0, 0};
     bool ballInHand = false;
     const char* NAME[2] = {"Player 1", "Player 2"};
+    int startShot = 1;
+
+    World w;
+    int slotId[9];
+    if (doBreak) {
+        w = buildRack(rng, slotId);
+    } else {
+        if (!pathArg.empty() && pathArg != "-") {
+            std::ifstream f(pathArg);
+            if (!f) { std::fprintf(stderr, "cannot open %s\n", pathArg.c_str()); return 2; }
+            std::ostringstream ss; ss << f.rdbuf(); text = ss.str();
+        } else {
+            std::ostringstream ss; ss << std::cin.rdbuf(); text = ss.str();
+        }
+        w = loadLayout(text);
+    }
+    const int ci = cueIdx(w.balls);
+    if (ci < 0) { std::fprintf(stderr, "no cue ball in layout\n"); return 2; }
 
     std::printf("=== 9-ball match: Player 1 vs Player 2 (seed %u) ===\n", seed);
-    if (!quiet) printMap(w);
 
     int winner = -1;
     const int MAXSHOTS = 80;
-    for (int shot = 1; shot <= MAXSHOTS; ++shot) {
+
+    if (doBreak) {
+        std::printf("\nRacked — tight 9-ball diamond (1 at apex toward the "
+                    "breaker, 9 dead centre):\n\n");
+        printRackDiagram(slotId);
+        // Prove it is a real diamond, not a line: actual (x,z) by row.
+        std::printf("\n  apex 1 at (%.3f, %.3f);  9 at (%.3f, %.3f);  "
+                    "back %d at (%.3f, %.3f)\n",
+                    w.balls[1].r.x, w.balls[1].r.z,
+                    w.balls[5].r.x, w.balls[5].r.z,
+                    slotId[8], w.balls[9].r.x, w.balls[9].r.z);
+        if (!quiet) printMap(w);
+        // Strong-but-human break: hit the 1-ball full, ~9 m/s ball speed.
+        Vec3 apex = w.balls[0].r;
+        for (const Ball& b : w.balls)
+            if (b.id == 1) apex = b.r;
+        Vec3 aim = apex - w.balls[ci].r; aim.y = 0; aim = aim.normalized();
+        const double th = nAim(rng) * 0.6, c = std::cos(th), sn = std::sin(th);
+        aim = {aim.x * c + aim.z * sn, 0.0, -aim.x * sn + aim.z * c};
+        std::printf("\nPlayer 1 BREAKS (≈ hard amateur, not a pro smash).\n");
+        cueStrike(w.balls[ci], aim, 6.0 * (1.0 + nSpd(rng)), 0.0, 0.0);
+        ShotOutcome o = simulateShot(w);
+        std::printf("Break -> ");
+        bool any = false;
+        for (int idp : o.pocketed) {
+            std::printf("%spotted %d", any ? ", " : "", idp);
+            any = true;
+        }
+        if (!any) std::printf("nothing potted");
+        if (o.cueScratched) std::printf("; SCRATCH");
+        std::printf("\nSpread after the break:\n");
+        if (!quiet) printMap(w);
+
+        if (o.won && o.foul == Foul::None) {
+            std::printf("\n*** Player 1 WINS on the break (9 potted) ***\n");
+            return 0;
+        }
+        if (o.foul != Foul::None) {
+            std::printf("Foul on the break — Player 2 gets ball-in-hand.\n");
+            player = 1;
+            ballInHand = true;
+        } else if (any) {
+            std::printf("Legal break with a ball pocketed — Player 1 "
+                        "continues.\n");
+            player = 0;
+        } else {
+            std::printf("Dry break — turn passes to Player 2.\n");
+            player = 1;
+        }
+        startShot = 2;
+    } else if (!quiet) {
+        printMap(w);
+    }
+
+    for (int shot = startShot; shot <= MAXSHOTS; ++shot) {
         const int tgt = legalTarget(w.balls);
         if (tgt < 0) { std::printf("\nNo object balls left — drawn.\n"); break; }
 
