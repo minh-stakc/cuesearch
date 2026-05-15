@@ -1,3 +1,12 @@
+// ===== INTERNALIZE =========================================================
+// Contact point P (from centre) = a*ihat + b*up - c*jc, c=sqrt(R^2-a^2-b^2).
+// Impulse J = F * jc (along the cue). Then v0 = J/m, w0 = (P x J)/I.
+//   => pure top/bottom offset b -> spin about the side axis (follow/draw);
+//      pure side offset a -> spin about vertical (english). DERIVE, don't
+//      recall a closed form (the transcribed reference one cancels at a=0).
+// F has the cue endmass denominator. Shepard squirt deflects v0 OPPOSITE the
+// english side; |offset| clamped to the miscue circle R/2.
+// ===========================================================================
 #include "engine/cuestrike.h"
 
 #include <algorithm>

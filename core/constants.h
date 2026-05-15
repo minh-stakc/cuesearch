@@ -19,10 +19,14 @@ constexpr double MU_SPIN    = 0.033;      // boring/spin (0.022–0.044)
 constexpr double MU_BALL    = 0.05;       // speed-dependent in CP3; nominal
 constexpr double E_BALL     = 0.95;       // restitution (0.92–0.98)
 
-// Ball–cushion (Mathavan 2010 calibrated)
-constexpr double E_CUSHION  = 0.98;       // energetic COR
-constexpr double MU_CUSHION = 0.14;       // ball–rail friction
-constexpr double CUSHION_H  = 1.4 * R;    // contact height = 7R/5  (sin th = 2/5)
+// Ball–cushion (Mathavan 2010). E_CUSHION is the paper's snooker-calibrated
+// COR; pool cushions are lossier (Dr. Dave: ~50% speed loss perpendicular),
+// so the resolver uses E_CUSHION_POOL.
+constexpr double E_CUSHION      = 0.98;   // Mathavan snooker COR (reference)
+constexpr double E_CUSHION_POOL = 0.85;   // fit so perpendicular retention
+                                          // ~0.5 (Dr. Dave efficiency)
+constexpr double MU_CUSHION     = 0.14;   // ball–rail friction
+constexpr double CUSHION_H      = 1.4 * R; // contact height 7R/5 (sin=2/5)
 
 // Ball–table (slate) — for CP5+ jump roadmap
 constexpr double E_TABLE    = 0.50;       // vertical restitution (0.5–0.7)

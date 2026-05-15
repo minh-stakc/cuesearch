@@ -68,10 +68,14 @@ TEST_CASE("cushion keeps the ball on the table and reflects it") {
     w.simulate([&](double, const WorldEvent& e,
                    const std::vector<Ball>& bs) {
         if (e.type == EventType::Cushion) reflected = true;
-        REQUIRE(bs[0].r.x <= w.table.cxMax() + 1e-6);
-        REQUIRE(bs[0].r.x >= w.table.cxMin() - 1e-6);
-        REQUIRE(bs[0].r.z <= w.table.czMax() + 1e-6);
-        REQUIRE(bs[0].r.z >= w.table.czMin() - 1e-6);
+        // Non-tunnelling invariant: the real (CP5) cushion compresses, so the
+        // ball centre may physically penetrate slightly past the rail-inset
+        // line during contact -- but it must never escape the table footprint
+        // (centre past the actual rail = tunnelled through).
+        REQUIRE(bs[0].r.x <= w.table.xMax + 1e-6);
+        REQUIRE(bs[0].r.x >= w.table.xMin - 1e-6);
+        REQUIRE(bs[0].r.z <= w.table.zMax + 1e-6);
+        REQUIRE(bs[0].r.z >= w.table.zMin - 1e-6);
     });
     REQUIRE(reflected);
 }

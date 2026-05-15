@@ -7,6 +7,7 @@
 #include "core/constants.h"
 #include "core/frame.h"
 #include "engine/resolve_ballball.h"
+#include "engine/resolve_cushion.h"
 #include "math/poly_solvers.h"
 
 namespace cue {
@@ -60,13 +61,29 @@ double World::simulate(
             if (!have || earlier(e, best)) { best = e; have = true; }
         };
 
+        const auto pockets = table.pockets();
+        const double prr = table.pocketR * table.pocketR;
+
         for (int k = 0; k < n; ++k) {
-            if (seg[k].state == BallState::Stationary) continue;
+            if (balls[k].pocketed || seg[k].state == BallState::Stationary)
+                continue;
 
             // Phase end.
             consider({now + seg[k].T, EventType::PhaseEnd, k, -1, -1});
 
             if (!moving(seg[k].state)) continue;
+
+            // Pocket capture: ball centre enters a pocket mouth.
+            for (int pk = 0; pk < 6; ++pk) {
+                const Vec3 D0 = p0[k] - pockets[pk];
+                std::array<double, 5> q{
+                    p2[k].dot(p2[k]), 2.0 * p2[k].dot(p1[k]),
+                    p1[k].dot(p1[k]) + 2.0 * p2[k].dot(D0),
+                    2.0 * p1[k].dot(D0), D0.dot(D0) - prr};
+                const double s = poly::smallestRootIn(q, 0.0, seg[k].T);
+                if (!std::isnan(s) && s > kTimeEps)
+                    consider({now + s, EventType::Pocket, k, -1, pk});
+            }
 
             // Cushions: ball-center coordinate reaches rail-inset line.
             const double win = seg[k].T;
@@ -86,10 +103,9 @@ double World::simulate(
         // Ball-ball: |D0 + D1 s + D2 s^2|^2 = (2R)^2  (quartic in s).
         const double dd = (2.0 * k::R) * (2.0 * k::R);
         for (int a = 0; a < n; ++a) {
-            if (!moving(seg[a].state)) continue;
+            if (balls[a].pocketed || !moving(seg[a].state)) continue;
             for (int b = a + 1; b < n; ++b) {
-                if (seg[b].state == BallState::Stationary && !moving(seg[a].state))
-                    continue;
+                if (balls[b].pocketed) continue;
                 const Vec3 D0 = p0[a] - p0[b];
                 const Vec3 D1 = p1[a] - p1[b];
                 const Vec3 D2 = p2[a] - p2[b];
@@ -123,10 +139,18 @@ double World::simulate(
             case EventType::PhaseEnd:
                 balls[best.i] = seg[best.i].endBall();
                 break;
-            case EventType::Cushion: {
+            case EventType::Pocket: {
                 Ball& bl = balls[best.i];
-                if (best.rail < 2) bl.v.x = -k::E_CUSHION * bl.v.x;
-                else               bl.v.z = -k::E_CUSHION * bl.v.z;
+                bl.pocketed = true;
+                bl.r = table.pockets()[best.rail];
+                bl.v = {};
+                bl.w = {};
+                break;
+            }
+            case EventType::Cushion: {
+                static const Vec3 nrm[4] = {{-1, 0, 0}, {1, 0, 0},
+                                            {0, 0, -1}, {0, 0, 1}};
+                resolveCushion(balls[best.i], nrm[best.rail]);   // CP5
                 break;
             }
             case EventType::BallBall:

@@ -1,3 +1,12 @@
+// ===== INTERNALIZE (whiteboard cold at a superday) =========================
+// Ball-ball contact time => |D0 + D1 t + D2 t^2|^2 = (2R)^2 => quartic in t.
+// 1. Depress quartic (x = y - A/4) -> y^4 + p y^2 + q y + r.
+// 2. Resolvent cubic gives z; factor into two quadratics (Schwarze).
+// 3. Analytic roots are Wilkinson-ill-conditioned for clustered roots, so
+//    Newton-polish against the ORIGINAL poly, then DEFLATE the best root and
+//    re-solve the cubic (coverage: two seeds can collapse onto one root).
+// Correctness oracle = residual |P(x)|~0 (conditioning-free), not root dist.
+// ===========================================================================
 #include "math/poly_solvers.h"
 
 #include <algorithm>

@@ -1,3 +1,12 @@
+// ===== INTERNALIZE =========================================================
+// Slip u = v + R(jhat x w). |u|>0 => Sliding; u=0,|v|>0 => Rolling.
+// Sliding: friction = -mu_s g uhat (DIRECTION CONSTANT) => path is exactly
+//   parabolic; slip dies at T = 2|u0| / (7 mu_s g). Derivation: contact-point
+//   accel couples v and w; relative slip decays at 7/2 the naive rate -> the
+//   "7". Equal-mass pure-roll onset is at 5/7 v0 (test anchor).
+// Rolling: only rolling resistance; straight line, stops at |v0|/(mu_r g).
+// Everything is closed-form per phase: NO global timestep.
+// ===========================================================================
 #include "engine/motion.h"
 
 #include <algorithm>

@@ -1,3 +1,12 @@
+// ===== INTERNALIZE =========================================================
+// Line-of-centres frame (yb = A->B). Friction is purely tangential, so the
+// NORMAL is decoupled: total normal impulse = (1+e) * m_reduced * v_closing
+// (m_reduced = m/2 equal masses). Integrate that impulse in N steps; each
+// step applies Coulomb friction -mu * dP along the contact slip and updates
+// v (dP/m) and w (5/(2mR) * dP). Recompute slip each step -> THROW EMERGES
+// from the accumulated tangential impulse (never hardcoded). Speed-dependent
+// Marlow mu. Textbook 90deg only at e=1; e=0.95 => atan(tanphi*2/(1-e)).
+// ===========================================================================
 #include "engine/resolve_ballball.h"
 
 #include <cmath>

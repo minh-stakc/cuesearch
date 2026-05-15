@@ -17,7 +17,9 @@
 
 namespace cue {
 
-enum class EventType { PhaseEnd, Cushion, BallBall };
+// Order matters: it is the deterministic tie-break for simultaneous events.
+// Pocket precedes Cushion (a ball falls in before it could bounce).
+enum class EventType { PhaseEnd, Pocket, Cushion, BallBall };
 
 struct WorldEvent {
     double t = 0.0;          // global time
