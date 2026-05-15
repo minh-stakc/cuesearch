@@ -101,3 +101,7 @@ target_link_options(trace_shot PRIVATE -static -static-libgcc -static-libstdc++)
 add_executable(solve tools/solve.cpp)
 target_link_libraries(solve PRIVATE cuesearch_solver)
 target_link_options(solve PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(randtable tools/randtable.cpp)
+target_link_libraries(randtable PRIVATE cuesearch_core)
+target_link_options(randtable PRIVATE -static -static-libgcc -static-libstdc++)
