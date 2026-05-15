@@ -55,3 +55,6 @@ target_link_libraries(world_tests PRIVATE cuesearch_engine)
 
 add_unit_test(resolve_tests tests/test_resolve.cpp)
 target_link_libraries(resolve_tests PRIVATE cuesearch_engine)
+
+add_unit_test(effects_tests tests/test_effects.cpp)
+target_link_libraries(effects_tests PRIVATE cuesearch_engine)

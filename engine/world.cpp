@@ -44,7 +44,7 @@ double World::simulate(
     int maxEvents, double horizon) {
     const int n = static_cast<int>(balls.size());
     std::vector<Segment> seg(n);
-    for (int k = 0; k < n; ++k) seg[k] = beginSegment(balls[k]);
+    for (int k = 0; k < n; ++k) seg[k] = beginSegment(balls[k], cloth);
 
     double now = 0.0;
 
@@ -133,7 +133,7 @@ double World::simulate(
                 resolveBallBall(balls[best.i], balls[best.j]);  // CP3
                 break;
         }
-        for (int k = 0; k < n; ++k) seg[k] = beginSegment(balls[k]);
+        for (int k = 0; k < n; ++k) seg[k] = beginSegment(balls[k], cloth);
 
         if (sink) sink(now, best, balls);
 

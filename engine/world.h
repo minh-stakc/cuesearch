@@ -29,6 +29,7 @@ struct WorldEvent {
 class World {
 public:
     Table table;
+    ClothParams cloth;          // per-table friction (affects every phase)
     std::vector<Ball> balls;
 
     // Run to rest (or caps). sink(t, event, balls) fires at each event.

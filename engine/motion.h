@@ -4,6 +4,7 @@
 // to rest. Correctness keystone — see core/frame.h for conventions.
 #include <functional>
 
+#include "core/cloth.h"
 #include "engine/ball.h"
 
 namespace cue {
@@ -17,6 +18,7 @@ struct Segment {
     BallState state = BallState::Stationary;
     double T = 0.0;     // phase duration (s); +inf for Stationary
     Ball start;         // ball at tau = 0, with .state == state
+    ClothParams cloth;  // friction set governing this phase
 
     Ball at(double tau) const;   // ball at local time tau in [0, T]
     Ball endBall() const;        // at(T), next state derived + invariant-snapped
@@ -27,13 +29,14 @@ struct Segment {
 };
 
 // Classify (v,w) -> the active phase Segment beginning at b.
-Segment beginSegment(const Ball& b);
+Segment beginSegment(const Ball& b, const ClothParams& cloth = {});
 
 // Advance a single ball through its full motion sequence to rest.
 // sink(tGlobal, ball) is called with densely sampled states (for tests/viz).
 // Returns total time to rest.
 double simulateToRest(Ball b,
                       const std::function<void(double, const Ball&)>& sink,
-                      double sampleDt = 1e-3, int maxSegments = 64);
+                      double sampleDt = 1e-3, int maxSegments = 64,
+                      const ClothParams& cloth = {});
 
 }  // namespace cue

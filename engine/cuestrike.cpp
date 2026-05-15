@@ -7,8 +7,16 @@
 
 namespace cue {
 
+namespace {
+// Rotate v about unit axis k by angle th (Rodrigues).
+Vec3 rotateAbout(const Vec3& v, const Vec3& k, double th) {
+    const double c = std::cos(th), s = std::sin(th);
+    return v * c + k.cross(v) * s + k * (k.dot(v) * (1.0 - c));
+}
+}  // namespace
+
 void cueStrike(Ball& out, const Vec3& aimDir, double speed, double a,
-               double b, double mCue) {
+               double b, double mCue, double elevationRad, double mbOverMe) {
     const double R = k::R, m = k::M;
     const double I = k::I_FACTOR * m * R * R;   // (2/5) m R^2
 
@@ -39,8 +47,27 @@ void cueStrike(Ball& out, const Vec3& aimDir, double speed, double a,
     //  term -> zero follow/draw spin; derive from the cross product instead.)
     const Vec3 P = ih * a + up * b - jc * c;
     const Vec3 J = jc * F;
-    out.v = jc * (F / m);
-    out.w = P.cross(J) / I;
+    Vec3 v0 = jc * (F / m);
+    Vec3 w0 = P.cross(J) / I;
+
+    // Shepard squirt: side offset deflects the cue ball OPPOSITE the english.
+    // tan(alpha) = (5/2)(a/R)sqrt(1-(a/R)^2) / ( mb/me + (5/2)(a/R)^2 )
+    if (std::fabs(a) > 1e-12) {
+        const double ar = a / R;
+        const double alpha =
+            std::atan2((2.5) * ar * std::sqrt(std::max(0.0, 1.0 - ar * ar)),
+                       mbOverMe + 2.5 * ar * ar);
+        v0 = rotateAbout(v0, up, std::copysign(alpha, a));
+    }
+
+    // Elevation tilts the spin axis about the side axis -> the sliding
+    // parabola then yields a curved (swerve/masse) path. No airborne launch
+    // (jump shots are the documented roadmap item).
+    if (std::fabs(elevationRad) > 1e-12)
+        w0 = rotateAbout(w0, ih, elevationRad);
+
+    out.v = v0;
+    out.w = w0;
 }
 
 }  // namespace cue
