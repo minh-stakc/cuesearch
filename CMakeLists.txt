@@ -26,12 +26,23 @@ target_include_directories(cuesearch_core INTERFACE ${CMAKE_SOURCE_DIR})
 add_library(cuesearch_math STATIC math/poly_solvers.cpp)
 target_include_directories(cuesearch_math PUBLIC ${CMAKE_SOURCE_DIR})
 
-enable_testing()
-add_executable(unit_tests tests/test_poly_solvers.cpp)
-target_link_libraries(unit_tests PRIVATE cuesearch_math cuesearch_core Catch2::Catch2WithMain)
-# Self-contained exe: avoids MinGW runtime-DLL lookup; aids reproducibility.
-target_link_options(unit_tests PRIVATE -static -static-libgcc -static-libstdc++)
+add_library(cuesearch_engine STATIC engine/motion.cpp)
+target_include_directories(cuesearch_engine PUBLIC ${CMAKE_SOURCE_DIR})
 
-# Register as a single CTest entry WITHOUT running the exe at build time
+enable_testing()
+
+# Self-contained exes: avoid MinGW runtime-DLL lookup; aid reproducibility.
+# Register CTest entries WITHOUT running the exe at build time
 # (catch_discover_tests executes it during build -> MinGW DLL issues).
-add_test(NAME unit_tests COMMAND unit_tests)
+function(add_unit_test name)
+  add_executable(${name} ${ARGN})
+  target_link_libraries(${name} PRIVATE cuesearch_core Catch2::Catch2WithMain)
+  target_link_options(${name} PRIVATE -static -static-libgcc -static-libstdc++)
+  add_test(NAME ${name} COMMAND ${name})
+endfunction()
+
+add_unit_test(unit_tests tests/test_poly_solvers.cpp)
+target_link_libraries(unit_tests PRIVATE cuesearch_math)
+
+add_unit_test(motion_tests tests/test_motion.cpp)
+target_link_libraries(motion_tests PRIVATE cuesearch_engine)
