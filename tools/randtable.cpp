@@ -65,7 +65,7 @@ int main(int argc, char** argv) {
         return false;
     };
 
-    std::printf("# random 9-ball layout (seed %u) — cue + %d object ball(s)\n",
+    std::printf("# random 9-ball layout (seed %u) - cue + %d object ball(s)\n",
                 seed, nObj);
     double x, z;
     if (freeSpot(x, z)) std::printf("B 0 C %.3f %.3f\n", x, z);

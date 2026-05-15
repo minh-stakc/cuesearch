@@ -226,7 +226,7 @@ int main(int argc, char** argv) {
     const int MAXSHOTS = 80;
 
     if (doBreak) {
-        std::printf("\nRacked — tight 9-ball diamond (1 at apex toward the "
+        std::printf("\nRacked - tight 9-ball diamond (1 at apex toward the "
                     "breaker, 9 dead centre):\n\n");
         printRackDiagram(slotId);
         // Prove it is a real diamond, not a line: actual (x,z) by row.
@@ -266,15 +266,15 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (o.foul != Foul::None) {
-            std::printf("Foul on the break — Player 2 gets ball-in-hand.\n");
+            std::printf("Foul on the break - Player 2 gets ball-in-hand.\n");
             player = 1;
             ballInHand = true;
         } else if (any) {
-            std::printf("Legal break with a ball pocketed — Player 1 "
+            std::printf("Legal break with a ball pocketed - Player 1 "
                         "continues.\n");
             player = 0;
         } else {
-            std::printf("Dry break — turn passes to Player 2.\n");
+            std::printf("Dry break - turn passes to Player 2.\n");
             player = 1;
         }
         startShot = 2;
@@ -284,7 +284,7 @@ int main(int argc, char** argv) {
 
     for (int shot = startShot; shot <= MAXSHOTS; ++shot) {
         const int tgt = legalTarget(w.balls);
-        if (tgt < 0) { std::printf("\nNo object balls left — drawn.\n"); break; }
+        if (tgt < 0) { std::printf("\nNo object balls left - drawn.\n"); break; }
 
         if (ballInHand) {
             placeBallInHand(w, ci, seed + shot);
@@ -301,7 +301,7 @@ int main(int argc, char** argv) {
         } else {
             WinPlan wp = planWin(w, fouls[player], 12, 3, seed + shot);
             if (wp.shot.targetId < 0) {
-                std::printf("\n%s has no legal shot — drawn.\n", NAME[player]);
+                std::printf("\n%s has no legal shot - drawn.\n", NAME[player]);
                 break;
             }
             s = wp.shot;
@@ -340,14 +340,14 @@ int main(int argc, char** argv) {
 
         if (o.won && o.foul == Foul::None) {
             winner = player;
-            std::printf("\n*** %s WINS — potted the 9 legally on shot %d ***\n",
+            std::printf("\n*** %s WINS - potted the 9 legally on shot %d ***\n",
                         NAME[player], shot);
             break;
         }
         if (o.foul != Foul::None) {
             if (++fouls[player] >= 3) {
                 winner = 1 - player;
-                std::printf("\n*** %s WINS — %s's 3rd consecutive foul ***\n",
+                std::printf("\n*** %s WINS - %s's 3rd consecutive foul ***\n",
                             NAME[1 - player], NAME[player]);
                 break;
             }
@@ -361,9 +361,9 @@ int main(int argc, char** argv) {
         bool potted = false;
         for (int id : o.pocketed) if (id == tgt) potted = true;
         if (potted && !safety) {
-            std::printf("  legal pot — %s continues.\n", NAME[player]);
+            std::printf("  legal pot - %s continues.\n", NAME[player]);
         } else {
-            std::printf("  %s — turn passes to %s.\n",
+            std::printf("  %s - turn passes to %s.\n",
                         safety ? "safety" : "miss", NAME[1 - player]);
             player = 1 - player;
         }

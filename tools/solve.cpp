@@ -79,7 +79,7 @@ static std::string methodDesc(const ShotEval& s) {
         o << "CAROM off the " << s.targetId << " into the 9 -> the "
           << pocketName(s.pocket) << " (INSTANT WIN)";
     else if (s.kind == ShotKind::Safety)
-        o << "play SAFE — legal contact, no pot, deny the opponent"
+        o << "play SAFE - legal contact, no pot, deny the opponent"
           << (s.rail >= 0 ? std::string(" (kick off the ") + railName(s.rail) +
                                 ")"
                           : "");
@@ -240,22 +240,22 @@ int main(int argc, char** argv) {
         if (o.foul != Foul::None) {
             ++foulsOnMe;
             if (foulsOnMe >= 3) {
-                std::printf("\n  (3rd consecutive foul — rack LOST in a real "
+                std::printf("\n  (3rd consecutive foul - rack LOST in a real "
                             "game.)\n");
                 break;
             }
-            std::printf("\n  (foul — opponent would get ball-in-hand; on %d "
+            std::printf("\n  (foul - opponent would get ball-in-hand; on %d "
                         "foul%s. Continuing the solved line.)\n",
                         foulsOnMe, foulsOnMe == 1 ? "" : "s");
         } else if (chosen.kind == ShotKind::Safety) {
-            std::printf("\n  (safety — legal contact, no pot intended; turn "
+            std::printf("\n  (safety - legal contact, no pot intended; turn "
                         "would pass. Continuing the solved line.)\n");
             foulsOnMe = 0;
         } else if (potted) {
-            std::printf("\n  (potted the %d — continue.)\n", tgt);
+            std::printf("\n  (potted the %d - continue.)\n", tgt);
             foulsOnMe = 0;
         } else {
-            std::printf("\n  (missed the %d, legal — turn would pass.)\n",
+            std::printf("\n  (missed the %d, legal - turn would pass.)\n",
                         tgt);
             foulsOnMe = 0;
         }
