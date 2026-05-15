@@ -20,6 +20,10 @@ struct Segment {
 
     Ball at(double tau) const;   // ball at local time tau in [0, T]
     Ball endBall() const;        // at(T), next state derived + invariant-snapped
+
+    // Position as a quadratic in local time: r(tau) = p0 + p1*tau + p2*tau^2.
+    // (p1=p2=0 for Spinning/Stationary.) Used for cross-ball event prediction.
+    void positionPoly(Vec3& p0, Vec3& p1, Vec3& p2) const;
 };
 
 // Classify (v,w) -> the active phase Segment beginning at b.

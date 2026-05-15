@@ -26,8 +26,10 @@ target_include_directories(cuesearch_core INTERFACE ${CMAKE_SOURCE_DIR})
 add_library(cuesearch_math STATIC math/poly_solvers.cpp)
 target_include_directories(cuesearch_math PUBLIC ${CMAKE_SOURCE_DIR})
 
-add_library(cuesearch_engine STATIC engine/motion.cpp)
+add_library(cuesearch_engine STATIC
+  engine/motion.cpp engine/cuestrike.cpp engine/world.cpp)
 target_include_directories(cuesearch_engine PUBLIC ${CMAKE_SOURCE_DIR})
+target_link_libraries(cuesearch_engine PUBLIC cuesearch_math)
 
 enable_testing()
 
@@ -46,3 +48,6 @@ target_link_libraries(unit_tests PRIVATE cuesearch_math)
 
 add_unit_test(motion_tests tests/test_motion.cpp)
 target_link_libraries(motion_tests PRIVATE cuesearch_engine)
+
+add_unit_test(world_tests tests/test_world.cpp)
+target_link_libraries(world_tests PRIVATE cuesearch_engine)

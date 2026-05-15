@@ -127,6 +127,20 @@ Ball Segment::endBall() const {
     return b;
 }
 
+void Segment::positionPoly(Vec3& p0, Vec3& p1, Vec3& p2) const {
+    p0 = start.r;
+    p1 = {};
+    p2 = {};
+    const double g = k::G;
+    if (state == BallState::Sliding) {
+        p1 = start.v;
+        p2 = slip(start.v, start.w).normalized() * (-0.5 * k::MU_SLIDE * g);
+    } else if (state == BallState::Rolling) {
+        p1 = start.v;
+        p2 = start.v.normalized() * (-0.5 * k::MU_ROLL * g);
+    }
+}
+
 double simulateToRest(Ball b,
                       const std::function<void(double, const Ball&)>& sink,
                       double sampleDt, int maxSegments) {
