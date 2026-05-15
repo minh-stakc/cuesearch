@@ -136,13 +136,14 @@ int main(int argc, char** argv) {
     std::printf("Starting table:\n");
     printMap(w);
 
-    for (int shot = 1; shot <= 12; ++shot) {
+    int noProgress = 0;
+    for (int shot = 1; shot <= 15; ++shot) {
         const int tgt = legalTarget(w.balls);
         if (tgt < 0) { std::printf("\nNo object balls left.\n"); break; }
 
         WinPlan p = planWin(w, foulsOnMe, 14, 3, 7);
         if (p.shot.targetId < 0) {
-            std::printf("\nNo legal shot available. Turn ends.\n");
+            std::printf("\nNo legal shot available. Stopping.\n");
             break;
         }
 
@@ -189,33 +190,39 @@ int main(int argc, char** argv) {
 
         if (o.won) { std::printf("\nRACK WON (9 potted legally).\n"); break; }
 
+        bool potted = false;
+        for (int id : o.pocketed) if (id == tgt) potted = true;
+
         if (o.foul != Foul::None) {
             ++foulsOnMe;
             if (foulsOnMe >= 3) {
-                std::printf("\nTHIRD CONSECUTIVE FOUL — rack LOST.\n");
-            } else {
-                std::printf("\nFoul — opponent gets ball-in-hand; you are "
-                            "now on %d foul%s. Turn passes.\n",
-                            foulsOnMe, foulsOnMe == 1 ? "" : "s");
+                std::printf("\n  (3rd consecutive foul — rack LOST in a real "
+                            "game.)\n");
+                break;
             }
-            break;
+            std::printf("\n  (foul — opponent would get ball-in-hand; on %d "
+                        "foul%s. Continuing the solved line.)\n",
+                        foulsOnMe, foulsOnMe == 1 ? "" : "s");
+        } else if (p.shot.kind == ShotKind::Safety) {
+            std::printf("\n  (safety — legal contact, no pot intended; turn "
+                        "would pass. Continuing the solved line.)\n");
+            foulsOnMe = 0;
+        } else if (potted) {
+            std::printf("\n  (potted the %d — continue.)\n", tgt);
+            foulsOnMe = 0;
+        } else {
+            std::printf("\n  (missed the %d, legal — turn would pass.)\n",
+                        tgt);
+            foulsOnMe = 0;
         }
 
-        foulsOnMe = 0;                       // any legal shot clears the count
-        bool potted = false;
-        for (int id : o.pocketed) if (id == tgt) potted = true;
-        if (p.shot.kind == ShotKind::Safety) {
-            std::printf(
-                "\nSafe (intended): forgo the pot, deny the opponent. "
-                "P(win)=%.2f is the EXPECTED value under stroke error; the "
-                "line above is one deterministic sample (a blocked nominal "
-                "line can foul on a single sample even when the shot is "
-                "+EV). Turn passes.\n",
-                p.winProb);
-            break;
-        }
-        if (!potted) {
-            std::printf("\nMissed the %d (legal) — turn passes.\n", tgt);
+        // No-progress guard: a deterministic shot that pots nothing and
+        // leaves the legal target unchanged would just repeat forever.
+        const bool progressed = potted || legalTarget(w.balls) != tgt;
+        noProgress = progressed ? 0 : noProgress + 1;
+        if (noProgress >= 2) {
+            std::printf("\nPosition cannot be progressed further by the "
+                        "planner (the line above repeats). Stopping.\n");
             break;
         }
     }
