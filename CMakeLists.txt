@@ -90,3 +90,7 @@ target_link_options(bench_solver PRIVATE -static -static-libgcc -static-libstdc+
 add_executable(trace_shot tools/trace_shot.cpp)
 target_link_libraries(trace_shot PRIVATE cuesearch_solver)
 target_link_options(trace_shot PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(solve tools/solve.cpp)
+target_link_libraries(solve PRIVATE cuesearch_solver)
+target_link_options(solve PRIVATE -static -static-libgcc -static-libstdc++)

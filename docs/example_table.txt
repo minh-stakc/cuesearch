@@ -1,0 +1,5 @@
+# Example 9-ball runout: 1 and 9 near pockets, cue mid-table.
+# Format: B <id> <C|S|T|E|O> <x> <z>   (metres; table 2.54 x 1.27)
+B 0 C 1.00 0.63
+B 1 O 0.0707 0.0707
+B 9 O 0.0707 1.1993
