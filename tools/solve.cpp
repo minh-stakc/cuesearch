@@ -89,7 +89,7 @@ static std::string methodDesc(const ShotEval& s) {
 
 // Compact top-down ASCII map ('C'=cue, digits=ids, 'o'=pocket, '.'=cloth).
 static void printMap(const World& w) {
-    const int W = 56, H = 15;
+    const int W = 120, H = 30;   // ~2.1 cm/char; resolves a real rack
     std::vector<std::string> g(H, std::string(W, '.'));
     auto cell = [&](double x, double z, int& c, int& r) {
         c = static_cast<int>(x / w.table.xMax * (W - 1) + 0.5);
