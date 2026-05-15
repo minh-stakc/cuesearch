@@ -30,8 +30,11 @@ struct ShotEval {
 std::vector<ShotEval> candidateShots(const World& w);
 
 // P(legal pot of e.targetId) under Gaussian aim/speed execution noise.
+// Rollouts are deterministically seeded per-index and run in parallel, so
+// the result is bitwise-independent of thread count (deterministic
+// parallelism).
 double evaluate(const World& w, const ShotEval& e, int nRollouts,
-                std::mt19937& rng, double aimSigmaRad = 0.009,
+                unsigned baseSeed, double aimSigmaRad = 0.009,
                 double speedRelSigma = 0.05);
 
 // Best single shot for the current legal target. Deterministic given seed.

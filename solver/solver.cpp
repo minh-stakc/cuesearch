@@ -1,6 +1,10 @@
 #include "solver/solver.h"
 
+#include <algorithm>
 #include <cmath>
+#include <future>
+#include <thread>
+#include <vector>
 
 #include "core/constants.h"
 #include "engine/cuestrike.h"
@@ -66,31 +70,49 @@ std::vector<ShotEval> candidateShots(const World& w) {
 }
 
 double evaluate(const World& w, const ShotEval& e, int nRollouts,
-                std::mt19937& rng, double aimSigmaRad,
+                unsigned baseSeed, double aimSigmaRad,
                 double speedRelSigma) {
-    std::normal_distribution<double> nAim(0.0, aimSigmaRad);
-    std::normal_distribution<double> nSpd(0.0, speedRelSigma);
-    int made = 0;
-    for (int r = 0; r < nRollouts; ++r) {
-        World ww = w;                                          // fresh copy
+    // One rollout, seeded ONLY by (baseSeed, r): result is independent of
+    // how the range is split -> deterministic under any thread count.
+    const auto oneRollout = [&](int r) -> int {
+        std::mt19937 rng(baseSeed * 2654435761u + static_cast<unsigned>(r));
+        std::normal_distribution<double> nAim(0.0, aimSigmaRad);
+        std::normal_distribution<double> nSpd(0.0, speedRelSigma);
+        World ww = w;
         const int ci = cueIdx(ww.balls);
-        const Vec3 aim = rotY(e.shot.aim, nAim(rng));
-        const double sp = e.shot.speed * (1.0 + nSpd(rng));
-        cueStrike(ww.balls[ci], aim, sp, e.shot.a, e.shot.b);
+        cueStrike(ww.balls[ci], rotY(e.shot.aim, nAim(rng)),
+                  e.shot.speed * (1.0 + nSpd(rng)), e.shot.a, e.shot.b);
         ShotOutcome o = simulateShot(ww);
-        bool potted = false;
         for (int id : o.pocketed)
-            if (id == e.targetId) potted = true;
-        if (potted && o.foul == Foul::None) ++made;
+            if (id == e.targetId && o.foul == Foul::None) return 1;
+        return 0;
+    };
+
+    unsigned T = std::max(1u, std::thread::hardware_concurrency());
+    T = std::min<unsigned>(T, static_cast<unsigned>(std::max(1, nRollouts)));
+    std::vector<std::future<int>> tasks;
+    for (unsigned t = 0; t < T; ++t) {
+        const int lo = static_cast<int>(t) * nRollouts / static_cast<int>(T);
+        const int hi =
+            static_cast<int>(t + 1) * nRollouts / static_cast<int>(T);
+        tasks.push_back(std::async(std::launch::async, [&, lo, hi] {
+            int m = 0;
+            for (int r = lo; r < hi; ++r) m += oneRollout(r);
+            return m;
+        }));
     }
+    int made = 0;
+    for (auto& f : tasks) made += f.get();
     return static_cast<double>(made) / nRollouts;
 }
 
 ShotEval bestShot(const World& w, int nRollouts, unsigned seed) {
-    std::mt19937 rng(seed);
     ShotEval best;
+    int i = 0;
     for (ShotEval e : candidateShots(w)) {
-        e.pPot = evaluate(w, e, nRollouts, rng);
+        // Distinct, fixed per-candidate base seed -> order-independent.
+        e.pPot = evaluate(w, e, nRollouts,
+                          seed ^ (0x9E3779B1u * static_cast<unsigned>(++i)));
         if (e.pPot > best.pPot) best = e;
     }
     return best;

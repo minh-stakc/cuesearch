@@ -28,7 +28,9 @@ target_include_directories(cuesearch_math PUBLIC ${CMAKE_SOURCE_DIR})
 
 add_library(cuesearch_engine STATIC
   engine/motion.cpp engine/cuestrike.cpp engine/world.cpp
-  engine/resolve_ballball.cpp engine/resolve_cushion.cpp engine/game.cpp)
+  engine/resolve_ballball.cpp engine/resolve_cushion.cpp engine/game.cpp
+  engine/layout.cpp)
+find_package(Threads REQUIRED)
 target_include_directories(cuesearch_engine PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(cuesearch_engine PUBLIC cuesearch_math)
 
@@ -70,10 +72,17 @@ target_link_libraries(game_tests PRIVATE cuesearch_engine)
 
 add_library(cuesearch_solver STATIC solver/solver.cpp solver/plan.cpp)
 target_include_directories(cuesearch_solver PUBLIC ${CMAKE_SOURCE_DIR})
-target_link_libraries(cuesearch_solver PUBLIC cuesearch_engine)
+target_link_libraries(cuesearch_solver PUBLIC cuesearch_engine Threads::Threads)
 
 add_unit_test(solver_tests tests/test_solver.cpp)
 target_link_libraries(solver_tests PRIVATE cuesearch_solver)
 
 add_unit_test(plan_tests tests/test_plan.cpp)
 target_link_libraries(plan_tests PRIVATE cuesearch_solver)
+
+add_unit_test(io_tests tests/test_io.cpp)
+target_link_libraries(io_tests PRIVATE cuesearch_solver)
+
+add_executable(bench_solver bench/bench_solver.cpp)
+target_link_libraries(bench_solver PRIVATE cuesearch_solver)
+target_link_options(bench_solver PRIVATE -static -static-libgcc -static-libstdc++)
