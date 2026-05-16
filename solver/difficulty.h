@@ -28,7 +28,9 @@ struct DifficultyTable {
     bool ready = false;
 };
 
-// Process-wide table (built/loaded once).
+// Process-wide table. Call difficultyMut().buildOrLoad(...) once at
+// startup; mobilityValue / the run-out search read difficulty().
 const DifficultyTable& difficulty();
+DifficultyTable& difficultyMut();
 
 }  // namespace cue

@@ -134,5 +134,6 @@ double DifficultyTable::potProb(double alphaDeg, double dCO,
 }
 
 const DifficultyTable& difficulty() { return g_tab; }
+DifficultyTable& difficultyMut() { return g_tab; }
 
 }  // namespace cue
