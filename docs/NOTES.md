@@ -113,3 +113,15 @@ The interview-relevant part of this project is not any single physics gate
   a literal 90 deg cut is geometrically unpottable (P->0 under any aim
   model), so that exact endpoint is ill-posed and is documented, not
   faked. The skill-curve SHAPE is now a regression gate.
+- **Quantified the shipped solver's run-out rate at the calibrated
+  player level (the metric the user asked for).** Default planner
+  (planRunout pot-EV depth-2, solve's routing), ball-in-hand on the 1,
+  clean spread, calibrated noise (straight shot = 1.0): run-out = 0/30,
+  avg 1.07 balls/run. It reliably pots the first (ball-in-hand) ball
+  then stops -- run-out needs positional control the bounded solver
+  doesn't have. Consistent with POS-b's 0/100 (shape planner). Sample
+  reduced 100->30 because depth-2 planning is heavy; the planner config
+  was NOT weakened to speed it up (that would misrepresent the shipped
+  player). The aiming/noise model is sound; run-out is gated by
+  positional planning, which is the documented out-of-scope ceiling --
+  measured, not hand-waved.
