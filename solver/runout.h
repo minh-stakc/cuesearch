@@ -28,4 +28,16 @@ struct LeaveShot {
 LeaveShot seedLeaveShot(const World& w, int targetId, int pocketIdx,
                         const Vec3& leave);
 
+// RO-3: two-level run-out search (CueCard structure). Goal-directed
+// candidates (pot the legal ball into each feasible pocket, leaving the
+// cue at zones that set up the NEXT ball -- via seedLeaveShot), scored by
+// table P(pot) * mobilityValue (fast, no live MC); top-k expanded one
+// more level; defensive flag when nothing makeable. Deterministic.
+struct RunOutPlan {
+    ShotEval shot;
+    double value = 0.0;     // chained P(pot)*mobility, depth-limited
+    bool defensive = false; // no makeable shot -> caller should play safe
+};
+RunOutPlan planRunOut(const World& w, int depth = 2, int beamK = 3);
+
 }  // namespace cue

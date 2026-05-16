@@ -109,6 +109,9 @@ target_link_libraries(difficulty_tests PRIVATE cuesearch_solver)
 add_unit_test(runout_ro_tests tests/test_runout_ro.cpp)
 target_link_libraries(runout_ro_tests PRIVATE cuesearch_solver)
 
+add_unit_test(runout_plan_tests tests/test_runout_plan.cpp)
+target_link_libraries(runout_plan_tests PRIVATE cuesearch_solver)
+
 add_unit_test(combo_tests tests/test_combo.cpp)
 target_link_libraries(combo_tests PRIVATE cuesearch_solver)
 

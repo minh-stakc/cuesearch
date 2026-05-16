@@ -189,4 +189,110 @@ LeaveShot seedLeaveShot(const World& w, int targetId, int pocketIdx,
     return out;
 }
 
+namespace {
+
+// Feasible pockets for object `oid` from cue position `cue` (LOS-gated),
+// with the table P(pot). Returns (pocketIdx, Ppot) pairs, P descending.
+std::vector<std::pair<int, double>> feasiblePockets(const World& w,
+                                                    const Vec3& cue,
+                                                    int oid) {
+    std::vector<std::pair<int, double>> v;
+    const int oi = idxOfId(w.balls, oid);
+    if (oi < 0) return v;
+    const Vec3 O = w.balls[oi].r;
+    const auto pk = w.table.pockets();
+    for (int p = 0; p < 6; ++p) {
+        const Vec3 g = ghostOf(O, pk[p]);
+        if (blocked(w, cue, g, 0, oid)) continue;
+        if (blocked(w, O, pk[p], oid, -999)) continue;
+        const double a = angBetween(g - cue, pk[p] - O) / DEG;
+        if (a > 78.0) continue;
+        double pp = difficulty().potProb(a, planar(g - cue).norm(),
+                                         planar(pk[p] - O).norm());
+        if (pp > 0.03) v.push_back({p, pp});
+    }
+    std::sort(v.begin(), v.end(),
+              [](auto& x, auto& y) { return x.second > y.second; });
+    return v;
+}
+
+// Candidate leave zones that set up the next legal ball t2: behind its
+// ghost toward each of its feasible pockets, a couple of standoffs.
+std::vector<Vec3> leaveZones(const World& w, int t2) {
+    std::vector<Vec3> z;
+    if (t2 < 0) return z;
+    const int oi = idxOfId(w.balls, t2);
+    if (oi < 0) return z;
+    const Vec3 O2 = w.balls[oi].r;
+    for (const Vec3& P2 : w.table.pockets()) {
+        if (blocked(w, O2, P2, t2, -999)) continue;
+        const Vec3 g2 = ghostOf(O2, P2);
+        const Vec3 back = planar(g2 - O2).normalized();
+        for (double L : {0.25, 0.50}) z.push_back(g2 + back * L);
+        if (z.size() >= 8) break;                    // cap
+    }
+    return z;
+}
+
+}  // namespace
+
+RunOutPlan planRunOut(const World& w, int depth, int beamK) {
+    RunOutPlan out;
+    const int ci = cueIdx(w.balls);
+    std::vector<int> ord = legalOrder(w);
+    if (ci < 0 || ord.empty()) { out.value = 1.0; return out; }
+    const int t = ord[0];
+    const int t2 = ord.size() > 1 ? ord[1] : -1;
+    const Vec3 cue = w.balls[ci].r;
+
+    auto pockets = feasiblePockets(w, cue, t);
+    if (pockets.empty()) { out.defensive = true; return out; }
+
+    std::vector<Vec3> zones = leaveZones(w, t2);
+    if (zones.empty()) zones.push_back(w.balls[idxOfId(w.balls, t)].r);
+
+    // Level 1: build candidates (pot t via pocket, leave for t2), score by
+    // table P(pot) * mobility of the modal post-shot state.
+    struct Cand { ShotEval shot; World after; double pPot, lvl1; };
+    std::vector<Cand> cands;
+    for (auto& pr : pockets) {
+        for (const Vec3& z : zones) {
+            LeaveShot ls = seedLeaveShot(w, t, pr.first, z);
+            if (!ls.potsTarget) continue;
+            World after = w;
+            cueStrike(after.balls[ci], ls.shot.shot.aim,
+                      ls.shot.shot.speed, ls.shot.shot.a, ls.shot.shot.b);
+            simulateShot(after);
+            Cand c;
+            c.shot = ls.shot;
+            c.after = after;
+            c.pPot = pr.second;
+            c.lvl1 = pr.second * mobilityValue(after);
+            cands.push_back(c);
+        }
+    }
+    if (cands.empty()) { out.defensive = true; return out; }
+
+    std::sort(cands.begin(), cands.end(),
+              [](const Cand& a, const Cand& b) { return a.lvl1 > b.lvl1; });
+    if ((int)cands.size() > beamK) cands.resize(beamK);
+
+    // Level 2: expand the beam one more ball (recurse on the modal leave).
+    double best = -1.0;
+    for (Cand& c : cands) {
+        double v;
+        if (depth <= 1 || legalTarget(c.after.balls) < 0) {
+            v = c.lvl1;
+        } else {
+            RunOutPlan nxt = planRunOut(c.after, depth - 1, beamK);
+            v = c.pPot * (legalTarget(c.after.balls) < 0
+                              ? 1.0
+                              : (nxt.defensive ? 0.0 : nxt.value));
+        }
+        if (v > best) { best = v; out.shot = c.shot; out.value = v; }
+    }
+    if (best <= 1e-4) out.defensive = true;          // nothing worthwhile
+    return out;
+}
+
 }  // namespace cue
