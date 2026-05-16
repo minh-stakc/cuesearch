@@ -71,7 +71,8 @@ add_unit_test(game_tests tests/test_game.cpp)
 target_link_libraries(game_tests PRIVATE cuesearch_engine)
 
 add_library(cuesearch_solver STATIC
-  solver/solver.cpp solver/plan.cpp solver/winsolve.cpp solver/shape.cpp)
+  solver/solver.cpp solver/plan.cpp solver/winsolve.cpp solver/shape.cpp
+  solver/difficulty.cpp)
 target_include_directories(cuesearch_solver PUBLIC ${CMAKE_SOURCE_DIR})
 target_link_libraries(cuesearch_solver PUBLIC cuesearch_engine Threads::Threads)
 
@@ -101,6 +102,9 @@ target_link_libraries(potcurve_tests PRIVATE cuesearch_solver)
 
 add_unit_test(runout_default_tests tests/test_runout_default.cpp)
 target_link_libraries(runout_default_tests PRIVATE cuesearch_solver)
+
+add_unit_test(difficulty_tests tests/test_difficulty.cpp)
+target_link_libraries(difficulty_tests PRIVATE cuesearch_solver)
 
 add_unit_test(combo_tests tests/test_combo.cpp)
 target_link_libraries(combo_tests PRIVATE cuesearch_solver)
