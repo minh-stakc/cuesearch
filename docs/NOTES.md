@@ -125,3 +125,33 @@ The interview-relevant part of this project is not any single physics gate
   player). The aiming/noise model is sound; run-out is gated by
   positional planning, which is the documented out-of-scope ceiling --
   measured, not hand-waved.
+- **Researched how real run-out solvers are built, then built one to a
+  pre-set falsifiable bar (RO-1..RO-4).** The literature
+  (PickPocket/CueCard/Chen&Li) says the win comes from STRUCTURE -- a
+  precomputed difficulty table + CueCard mobility value + inverse-physics
+  leave generator + shallow search -- not more compute (CueCard 20-CPU
+  beat 1-CPU by only 55 vs ~50%). Pre-committed BEFORE measuring (audit
+  trail: RO-1 3ba8ec4, RO-2 849625e, RO-3 cd39aae and the RO-4 test
+  header all predate the run): SUCCESS >=35%, FAILURE <15%, goalposts
+  fixed. Results: RO-1 difficulty table PASSED; RO-2 inverse leave gen
+  PASSED (~31x better cue control than blind -- 0.030 m vs 0.936 m on a
+  35 deg cut); RO-3 two-level search PASSED and -- the decisive
+  tractability result the research predicted -- runs in 3.2 s where
+  POS-b's live-MC depth-2 timed out at >600 s (~200x). RO-4 (the
+  run-out gate) FAILED: 0/24, avg 0.92 balls/run, below the 15%
+  threshold. ONE bounded diagnostic (pre-committed cap: one run, then a
+  named bug or document) ruled out every wiring-bug branch (placement not
+  defaulting; not bailing defensive; the chosen shot pots noiselessly --
+  mechanism correct) and isolated the real cause: value-maximising
+  position cuts miss under calibrated ~0.5 deg/5% noise and 9-ball's
+  ordering ends the run on the first miss. Independent corroboration: the
+  unrelated old planner stack also scores 0/30 on this exact rack+noise
+  -- two solvers at 0% => rack+noise is the dominant variable, not an
+  RO-3 bug. STOPPED per the pre-commitment (no fix-and-re-measure past
+  the stop), shipped planRunOut OPT-IN only, documented the ceiling and
+  exactly what would close it (MC-over-noise per candidate + finer table
+  + deeper search; research-scale, out of scope). The transferable point:
+  the research correctly predicted and delivered the *tractability* fix;
+  the *capability* bar needs heavier machinery -- and a falsifiable
+  pre-set bar, respected on failure, is worth more than a faked SOTA
+  number.

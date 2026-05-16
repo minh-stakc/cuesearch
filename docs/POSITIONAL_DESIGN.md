@@ -123,3 +123,87 @@ across a chain). Both are a separate research-scale effort, out of scope.
 The value here is the measured, honest boundary -- "explicit shape
 planning works one ball ahead but not as a run-out under noise" -- not a
 faked SOTA claim.
+
+---
+
+## RO: the literature-grounded run-out solver (second attempt)
+
+After POS-b's honest failure I researched how working run-out solvers are
+actually built (PickPocket/Smith 2007; CueCard/IJCAI 2009; Chen & Li
+RL+MCTS). The canonical architecture is NOT "search harder" -- it is a
+**precomputed pot-probability difficulty table** + a **mobility value
+function** (CueCard's `1*p1 + 0.33*p2 + 0.15*p3`) + an **inverse-physics
+leave generator** + shallow goal-directed search + defensive fallback.
+CueCard's own lesson: structure carried the win, not compute (20-CPU only
+55% vs 1-CPU). The only demonstrated 9-ball run-out number in the
+literature is Chen & Li's ~40%, which set the honest bar.
+
+**Pre-committed gate (set in the RO research plan BEFORE RO-4 was
+measured; audit trail: RO-1 `3ba8ec4`, RO-2 `849625e`, RO-3 `cd39aae`
+and the `tests/test_runout_ro4.cpp` header all predate the measurement;
+goalposts NOT moved):**
+
+- **SUCCESS  >= 35%** (near the only literature 9-ball figure) -> ship
+  the structured solver as the default.
+- **FAILURE  <  15%** -> bounded; ship opt-in, document the ceiling.
+- **15-35%** -> partial; ship opt-in, document.
+
+### OUTCOME (measured, not adjusted)
+
+- **RO-1 (difficulty table): PASSED** 8/8. Trilinear pot-prob table over
+  {cut alpha, d_cue-OB, d_OB-pocket}, disk-cached; straight >= 0.90,
+  monotone, table-vs-live within 0.18.
+- **RO-2 (mobility value + inverse leave gen): PASSED** 9/9. On a 35 deg
+  cut the seeded leave lands 0.030 m from target vs 0.936 m blind -- ~31x
+  better cue control (the thing POS-a's blind coordinate descent could
+  not do).
+- **RO-3 (two-level CueCard search): PASSED** 8/8 in **3.2 s**. This is
+  the decisive *tractability* result the research predicted: POS-b's
+  live-MC depth-2 timed out at >600 s; the difficulty-table-driven search
+  is ~200x faster. Pots the legal ball, defensive-on-snooker,
+  deterministic. (Honest: lookahead *tied* greedy on the test scenario --
+  the no-worse gate, not a demonstrated multi-shot win; that is what RO-4
+  measures.)
+- **RO-4 (the pre-committed run-out gate): FAILED.** Structured solver
+  (RO-1+RO-2+RO-3, depth 2, beamK 3, production 80-sim/cell table),
+  ball-in-hand on the 1, clean 9-ball rack, calibrated noise
+  (k::AIM_SIGMA=0.009): **run-out 0/24, avg 0.92 balls/run**. Below the
+  15% failure threshold. Sample reduced 100->24 for compute and stated;
+  the planner config was NOT weakened.
+
+Decision (per the pre-commitment, goalposts NOT moved): **stop.**
+`planRunOut` ships as an OPT-IN library path (`solver/runout.h`), never
+on a default route; the validated bounded solver stays primary. No
+"fix-and-re-measure" past the pre-committed stop.
+
+### Why it falls short -- diagnosed, not hand-waved
+
+A single bounded stderr-instrumented diagnostic (pre-committed cap: one
+run, then fix a *named* bug or document) ruled out every wiring-bug
+branch and isolated the true cause:
+
+- Ball-in-hand placement is NOT defaulting (`default=0`; 3 of 12
+  candidate spots non-defensive; a real spot chosen).
+- The planner is NOT bailing defensive on a clean rack (`defensive=0`,
+  `targetId=1`).
+- The chosen shot **pots the legal ball noiselessly** -- the inverse-
+  physics mechanism is correct.
+- The run still dies at avg 0.92 balls because under the calibrated
+  ~0.5 deg aim + 5% speed noise the *value-maximising position cuts*
+  miss often, and 9-ball's strict ascending order ends the run on the
+  first miss. **Independent corroboration: the old, unrelated planner
+  stack (`test_runout_default`) also scores 0/30 on this exact
+  rack+noise** -- two independent solvers at 0% means the rack+noise is
+  the dominant variable, not an RO-3 bug.
+
+This is the genuine bounded ceiling. Closing it needs the heavier
+machinery the literature also describes -- full Monte-Carlo-over-noise
+per candidate (not a single noiseless difficulty-table lookup), a
+finer-grained difficulty model, and deeper search -- which is a separate
+research-scale effort, out of scope. The honest, interview-grade result:
+**the research correctly identified and delivered the *tractability* fix
+(RO-3: 3.2 s vs a 10-min timeout, a real ~200x win) and materially
+better cue control (RO-2: ~31x), but end-to-end run-out at a calibrated
+human noise level remains gated by per-shot make-probability under noise
+compounded over the ordered rack** -- measured against a falsifiable
+pre-set bar, not faked.
