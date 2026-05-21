@@ -1,11 +1,13 @@
 // Emit a JSON trace of a shot (or a sequence of shots) for the visualizer.
-//   trace_shot follow  > follow.json     single post-collision follow arc
-//   trace_shot runout  > runout.json     chain shots until rack is cleared
-//   trace_shot break   > break.json      9-ball rack + a real break strike
-//   trace_shot -       < layout.txt > shot.json
+//   trace_shot follow      > follow.json    single post-collision follow arc
+//   trace_shot runout      > runout.json    chain shots until rack is cleared
+//   trace_shot break       > break.json     9-ball rack + a real break strike
+//   trace_shot best_break  > gold.json      replay the golden_break winner
+//                                           (reads docs/golden_best.txt)
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <sstream>
@@ -163,19 +165,43 @@ int main(int argc, char** argv) {
             if (!pottedTgt) break;
         }
         emitFooter(js);
-    } else if (mode == "break") {
-        // 9-ball break: cue near the head string, hit the apex 1 a hair
-        // off-centre with light follow at ~9 m/s -- a firm strong-amateur
-        // break that visibly scatters the rack.
+    } else if (mode == "break" || mode == "best_break") {
+        // 9-ball break. Default ("break"): a firm strong-amateur break,
+        // apex hit a hair off-centre with light follow at ~9 m/s.
+        // best_break: replay the winning parameters from golden_break,
+        // read from docs/golden_best.txt (cueZ aimDz speed a b).
         const unsigned seed = argc > 2 ? std::stoul(argv[2]) : 7u;
+        double cueX = -1.0, cueZ = -1.0;
+        double aimDz = (seed & 1 ? 1.0 : -1.0) * 0.25 * R;
+        double speed = 9.0, tipA = 0.0, tipB = 0.25 * R;
+        if (mode == "best_break") {
+            std::ifstream in("docs/golden_best.txt");
+            if (!in) {
+                std::fprintf(stderr,
+                    "best_break: docs/golden_best.txt not found -- run "
+                    "./build/golden_break first\n");
+                return 2;
+            }
+            std::string key; double val;
+            while (in >> key >> val) {
+                if (key == "cueX")       cueX  = val;
+                else if (key == "cueZ")  cueZ  = val;
+                else if (key == "aimDz") aimDz = val;
+                else if (key == "speed") speed = val;
+                else if (key == "a")     tipA  = val;
+                else if (key == "b")     tipB  = val;
+            }
+        }
         World w = breakLayout(seed);
         emitHeader(js, w);
         const int ci = cueIdx(w.balls);
+        if (cueX > 0.0) w.balls[ci].r.x = cueX;
+        if (cueZ > 0.0) w.balls[ci].r.z = cueZ;
         Vec3 apex = w.balls[ci].r;
         for (const Ball& b : w.balls) if (b.id == 1) apex = b.r;
-        apex.z += (seed & 1 ? 1.0 : -1.0) * 0.25 * R;     // slight cut
+        apex.z += aimDz;
         Vec3 aim = apex - w.balls[ci].r; aim.y = 0; aim = aim.normalized();
-        cueStrike(w.balls[ci], aim, 9.0, 0.0, 0.25 * R);  // light follow
+        cueStrike(w.balls[ci], aim, speed, tipA, tipB);
         tAcc += emitShot(js, w, tAcc, first);
         emitFooter(js);
     } else {

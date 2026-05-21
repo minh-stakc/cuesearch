@@ -39,6 +39,63 @@ with light follow at ~9 m/s. Ball–ball collisions are exact quartic
 roots; the spread is what the physics actually produces, not a tuned
 particle system.*
 
+### Golden-break parameter search
+
+A "golden break" pots the 9 on the break shot — instant win in 9-ball.
+The WPA rule lets the breaker place the cue **anywhere behind the head
+string** (the 2nd diamond from the shooter's short rail). That's a
+6-dimensional decision space: cue X, cue Z, aim cut on the 1, cue
+speed, side spin, follow/draw.
+
+`tools/golden_break.cpp` sweeps the legal grid, runs N noisy breaks
+per cell (rack jitter + calibrated aim/speed noise, **not** perfect
+execution), and reports the cell that maximises P(gold) with a
+two-stage tournament (4× samples on the top-10) and a Wilson 95% CI.
+`viz/plot_golden_break.py` renders the full grid as a 4-panel figure:
+position heatmap, aim/speed heatmap, overhead table cartoon with the
+optimal shot drawn, and the cue-ball tip cross-section.
+
+![golden break](docs/golden_break.png)
+
+Search result on the committed grid (`--samples 50`, 2025 cells, stage-2
+200 samples on the top-10): the winning cell is cue ball at
+**x ≈ 0.15 m / z ≈ 0.90 m** (close to a long rail, well inside the
+kitchen), aim with a slight left cut on the 1 (−0.30 R), speed **11
+m/s** (the classic controlled-break tempo), **no side spin**, light
+draw. Best-in-grid **P(gold) = 4.0%, 95 % CI [2.0 %, 7.7 %]** — just
+above the 1–3 % pro tournament reference band, which means the engine's
+break model is plausible but mildly optimistic; tightening that gap is
+exactly what `BR-2` (spread-plausibility validation) is for.
+
+Replaying the winning parameters with `trace_shot best_break`:
+
+![best break](docs/best_break.gif)
+
+Honest framing baked into the tool's output:
+
+- The reported number is **P(gold | this engine's break model)**. The
+  break model is not yet validated against tournament break statistics
+  (that's `BR-2` in [`docs/BREAK_AND_RUN.md`](docs/BREAK_AND_RUN.md)).
+  Tournament reference for pros is ~1–3% — printed alongside so the
+  reader can sanity-check the engine.
+- "Legal break" is approximated as no foul (cue hit the 1 first, no
+  scratch). The exact WPA *4-balls-to-a-rail-when-nothing-pocketed*
+  clause needs rail-contact instrumentation; at the speeds searched
+  any non-pot non-scratch shot drives the rack to the rails, so the
+  simplification is approximately tight (stated in the output).
+- Displayed P(gold) is **best-in-grid** — a faint upward selection
+  bias from picking the stage-1 max remains even after the 4× re-eval,
+  which the tool's preamble calls out.
+
+Run it yourself:
+
+```bash
+./build/golden_break --samples 50            # ~10 min, ~2k cells
+python viz/plot_golden_break.py              # docs/golden_break.png
+./build/trace_shot best_break > best.json    # the winner as a shot
+python viz/render.py best.json docs/best_break.gif
+```
+
 ## Why event-based (the architectural argument)
 
 Each ball is in a motion state (Stationary / Spinning / Sliding /

@@ -137,3 +137,7 @@ target_link_options(randtable PRIVATE -static -static-libgcc -static-libstdc++)
 add_executable(match tools/match.cpp)
 target_link_libraries(match PRIVATE cuesearch_solver)
 target_link_options(match PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(golden_break tools/golden_break.cpp)
+target_link_libraries(golden_break PRIVATE cuesearch_engine)
+target_link_options(golden_break PRIVATE -static -static-libgcc -static-libstdc++)
