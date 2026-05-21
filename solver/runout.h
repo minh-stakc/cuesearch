@@ -33,10 +33,19 @@ LeaveShot seedLeaveShot(const World& w, int targetId, int pocketIdx,
 // cue at zones that set up the NEXT ball -- via seedLeaveShot), scored by
 // table P(pot) * mobilityValue (fast, no live MC); top-k expanded one
 // more level; defensive flag when nothing makeable. Deterministic.
+// Sub-cause when defensive: which branch in planRunOut bailed.
+// Tells callers (B&R harness) which named lever is the right next move:
+//   NoLOS     -> positional / break-model issue, BR-1 (MC scoring) can't help
+//   CandsEmpty-> geometric candidates exist but noiseless seed couldn't pot;
+//                BR-1's MC might still find them playable
+//   LowValue  -> candidates exist, all score near zero; BR-1's natural target
+enum class DefensiveCause { None, NoLOS, CandsEmpty, LowValue };
+
 struct RunOutPlan {
     ShotEval shot;
     double value = 0.0;     // chained P(pot)*mobility, depth-limited
     bool defensive = false; // no makeable shot -> caller should play safe
+    DefensiveCause defCause = DefensiveCause::None;
 };
 RunOutPlan planRunOut(const World& w, int depth = 2, int beamK = 3);
 

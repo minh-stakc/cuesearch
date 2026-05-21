@@ -246,7 +246,11 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
     const Vec3 cue = w.balls[ci].r;
 
     auto pockets = feasiblePockets(w, cue, t);
-    if (pockets.empty()) { out.defensive = true; return out; }
+    if (pockets.empty()) {
+        out.defensive = true;
+        out.defCause = DefensiveCause::NoLOS;
+        return out;
+    }
 
     std::vector<Vec3> zones = leaveZones(w, t2);
     if (zones.empty()) zones.push_back(w.balls[idxOfId(w.balls, t)].r);
@@ -271,7 +275,11 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
             cands.push_back(c);
         }
     }
-    if (cands.empty()) { out.defensive = true; return out; }
+    if (cands.empty()) {
+        out.defensive = true;
+        out.defCause = DefensiveCause::CandsEmpty;
+        return out;
+    }
 
     std::sort(cands.begin(), cands.end(),
               [](const Cand& a, const Cand& b) { return a.lvl1 > b.lvl1; });
@@ -291,7 +299,10 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
         }
         if (v > best) { best = v; out.shot = c.shot; out.value = v; }
     }
-    if (best <= 1e-4) out.defensive = true;          // nothing worthwhile
+    if (best <= 1e-4) {
+        out.defensive = true;
+        out.defCause = DefensiveCause::LowValue;
+    }
     return out;
 }
 

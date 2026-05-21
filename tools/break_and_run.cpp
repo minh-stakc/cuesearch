@@ -232,6 +232,7 @@ int main(int argc, char** argv) {
     trials.reserve(TRIALS);
     int cleared = 0, golden = 0, illegal = 0, scratch = 0, miss = 0;
     int wrongFirst = 0, noContact = 0, bail = 0, capped = 0;
+    int bailNoLOS = 0, bailCandsEmpty = 0, bailLowValue = 0;
     int legalBreaks = 0;
     int totalBallsOnBreak = 0;
     std::vector<int> chainHist(10, 0);
@@ -295,7 +296,11 @@ int main(int argc, char** argv) {
             RunOutPlan p = planRunOut(w, 2, 3);
             if (p.defensive || p.shot.targetId < 0) {
                 tr.terminal = TerminalCause::SafetyBail;
-                ++bail; resolved = true; break;
+                ++bail;
+                if (p.defCause == DefensiveCause::NoLOS)      ++bailNoLOS;
+                else if (p.defCause == DefensiveCause::CandsEmpty) ++bailCandsEmpty;
+                else if (p.defCause == DefensiveCause::LowValue)   ++bailLowValue;
+                resolved = true; break;
             }
             const double th = nA(rng), c = std::cos(th), sn = std::sin(th);
             Vec3 aim{p.shot.shot.aim.x * c + p.shot.shot.aim.z * sn, 0.0,
@@ -399,6 +404,14 @@ int main(int argc, char** argv) {
     std::printf("  NoContact      %4d (%.1f%%)\n",
                 noContact, pct(noContact));
     std::printf("  SafetyBail     %4d (%.1f%%)\n", bail, pct(bail));
+    std::printf("    -- NoLOS         %4d (%.1f%%)  <- positional/break-model "
+                "(BR-1 can't help)\n", bailNoLOS, pct(bailNoLOS));
+    std::printf("    -- CandsEmpty    %4d (%.1f%%)  <- noiseless seed fails "
+                "to pot (BR-1 may help)\n",
+                bailCandsEmpty, pct(bailCandsEmpty));
+    std::printf("    -- LowValue      %4d (%.1f%%)  <- candidates score "
+                "near zero (BR-1's target)\n",
+                bailLowValue, pct(bailLowValue));
     std::printf("  ShotCap        %4d (%.1f%%)\n", capped, pct(capped));
 
     std::printf("\n=== chain-length distribution (post-break shots "
