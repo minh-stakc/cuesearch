@@ -31,11 +31,15 @@
 //    8-15 m/s the simplification is approximately tight and stated.
 //  * The reported P(gold) is conditional on this engine's break model.
 //    The break model is NOT validated against tournament stats yet
-//    (that is BR-2 in docs/BREAK_AND_RUN.md). A tournament reference
-//    (~1-3% golden break for pros) is printed alongside so the reader
-//    can sanity-check the engine.
+//    (that is BR-2 in docs/BREAK_AND_RUN.md). Observed pro-tournament
+//    golden-break rates are single-digit percent; far above that band,
+//    suspect the break model, not the optimiser.
 //  * Stage-2 Wilson CI is honest about stage-2 sampling, but a faint
-//    upward selection bias from picking the stage-1 max remains.
+//    upward selection bias from picking the stage-1 max remains. For a
+//    bias-corrected number at the winning cell, run `trace_shot
+//    best_break` -- it does a 1000-seed reproducer check, writes the
+//    verified rate back to docs/golden_best.txt, and refuses to render
+//    a misleading gif if the reproducer rate is zero.
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -270,10 +274,13 @@ int main(int argc, char** argv) {
                 "non-scratch shot drives the rack to the rails -- "
                 "tight.\n");
     std::printf("conditional: P(gold) is *given* this engine's break "
-                "model.\n  Tournament reference (pros, all venues): "
-                "roughly 1-3%% golden break.\n  Within that band -> "
-                "engine looks plausible; far above -> the break\n  "
-                "model is the suspect, not the optimiser.\n");
+                "model.\n  Reference: golden break is rare in pro play "
+                "(single-digit percent;\n  a sanity-check, not a "
+                "citation). Far above that band -> the break\n  model "
+                "is the suspect, not the optimiser. NB: the displayed\n  "
+                "stage-2 P(gold) is the best-in-grid -- run "
+                "trace_shot best_break for a\n  1000-seed bias-corrected "
+                "re-evaluation at the winning cell.\n");
     std::printf("selection: displayed P(gold) is best-in-grid; faint "
                 "upward bias from\n  picking the stage-1 max remains "
                 "even after the 4x re-eval.\n\n");

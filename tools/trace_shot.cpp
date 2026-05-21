@@ -86,6 +86,47 @@ World runoutLayout() {
     return w;
 }
 
+// EXACT mirror of golden_break.cpp's rackWithJitter -- same rng
+// consumption order, same slot pattern, cue placed at (0, R, z0) so the
+// caller can override X and Z without disturbing the rng sequence. Use
+// this (not breakLayout) when reproducing a golden_break search seed.
+World rackForSearch(std::mt19937& rng) {
+    World w;
+    const double R = k::R;
+    const double s     = 2.0 * R * 1.015;
+    const double pitch = s * 0.86602540378;
+    const double fx = 0.75 * w.table.xMax;
+    const double z0 = 0.5  * w.table.zMax;
+    std::uniform_real_distribution<double> J(-3e-4, 3e-4);
+
+    struct Slot { double x, z; };
+    Slot slot[9] = {
+        {fx, z0},
+        {fx + pitch,     z0 - s / 2}, {fx + pitch,     z0 + s / 2},
+        {fx + 2 * pitch, z0 - s},     {fx + 2 * pitch, z0},
+        {fx + 2 * pitch, z0 + s},
+        {fx + 3 * pitch, z0 - s / 2}, {fx + 3 * pitch, z0 + s / 2},
+        {fx + 4 * pitch, z0},
+    };
+    std::vector<int> rest = {2, 3, 4, 5, 6, 7, 8};
+    std::shuffle(rest.begin(), rest.end(), rng);
+    int id[9];  id[0] = 1;  id[4] = 9;
+    for (int k = 0, r = 0; k < 9; ++k)
+        if (k != 0 && k != 4) id[k] = rest[r++];
+
+    Ball cue; cue.type = BallType::Cue; cue.id = 0;
+    cue.r = {0.0, R, z0};
+    w.balls.push_back(cue);
+    for (int k = 0; k < 9; ++k) {
+        Ball b;
+        b.type = BallType::Object;
+        b.id   = id[k];
+        b.r    = {slot[k].x + J(rng), R, slot[k].z + J(rng)};
+        w.balls.push_back(b);
+    }
+    return w;
+}
+
 // A tight 9-ball diamond on the foot spot: 1 at the apex toward the
 // breaker, 9 dead centre, the rest shuffled. Cue in the kitchen on the
 // head-string side -- mirrors tools/match.cpp's break setup so the
@@ -169,11 +210,12 @@ int main(int argc, char** argv) {
         // 9-ball break. Default ("break"): a firm strong-amateur break,
         // apex hit a hair off-centre with light follow at ~9 m/s.
         // best_break: replay the winning parameters from golden_break,
-        // read from docs/golden_best.txt (cueZ aimDz speed a b).
+        // read from docs/golden_best.txt.
         const unsigned seed = argc > 2 ? std::stoul(argv[2]) : 7u;
         double cueX = -1.0, cueZ = -1.0;
         double aimDz = (seed & 1 ? 1.0 : -1.0) * 0.25 * R;
         double speed = 9.0, tipA = 0.0, tipB = 0.25 * R;
+        bool addNoise = false;
         if (mode == "best_break") {
             std::ifstream in("docs/golden_best.txt");
             if (!in) {
@@ -191,17 +233,90 @@ int main(int argc, char** argv) {
                 else if (key == "a")     tipA  = val;
                 else if (key == "b")     tipB  = val;
             }
+            addNoise = true;
         }
-        World w = breakLayout(seed);
+        // Helper: build the break + apply strike at seed s. Mirrors
+        // golden_break.cpp's oneBreak EXACTLY when addNoise is true so
+        // the reproducer rate matches the search. Returns the world
+        // ready for simulateShot or w.trace.
+        auto buildBreak = [&](unsigned s) -> World {
+            World ww;
+            int ci2;
+            if (addNoise) {
+                std::mt19937 rng(s);
+                ww = rackForSearch(rng);   // SAME rng pattern as the search
+                ci2 = cueIdx(ww.balls);
+                if (cueX > 0.0) ww.balls[ci2].r.x = cueX;
+                if (cueZ > 0.0) ww.balls[ci2].r.z = cueZ;
+                Vec3 ap = ww.balls[ci2].r;
+                for (const Ball& b : ww.balls) if (b.id == 1) ap = b.r;
+                ap.z += aimDz;
+                Vec3 am = ap - ww.balls[ci2].r; am.y = 0;
+                am = am.normalized();
+                std::normal_distribution<double> nA(0.0, k::AIM_SIGMA);
+                std::normal_distribution<double> nS(0.0, k::SPEED_SIGMA);
+                const double th = nA(rng), c = std::cos(th), sn = std::sin(th);
+                am = {am.x * c + am.z * sn, 0.0, -am.x * sn + am.z * c};
+                const double v = speed * (1.0 + nS(rng));
+                cueStrike(ww.balls[ci2], am, v, tipA, tipB);
+            } else {
+                ww = breakLayout(s);
+                ci2 = cueIdx(ww.balls);
+                Vec3 ap = ww.balls[ci2].r;
+                for (const Ball& b : ww.balls) if (b.id == 1) ap = b.r;
+                ap.z += aimDz;
+                Vec3 am = ap - ww.balls[ci2].r; am.y = 0;
+                am = am.normalized();
+                cueStrike(ww.balls[ci2], am, speed, tipA, tipB);
+            }
+            return ww;
+        };
+
+        unsigned usedSeed = seed;
+        if (mode == "best_break") {
+            // VERIFY the reproducer matches the search before picking a
+            // cherry-picked golden seed. The rack-build + noise rng now
+            // mirrors golden_break::oneBreak exactly, so the measured
+            // rate here should be within the search's 95% CI [2%, 7.7%].
+            // If not, fail loudly rather than render a misleading gif.
+            const int VERIFY_N = 1000;
+            int goldens = 0, firstGolden = -1;
+            for (int s = 1; s <= VERIFY_N; ++s) {
+                World ww = buildBreak((unsigned)s);
+                ShotOutcome o = simulateShot(ww);
+                if (o.won && o.foul == Foul::None) {
+                    ++goldens;
+                    if (firstGolden < 0) firstGolden = s;
+                }
+            }
+            const double rate = (double)goldens / VERIFY_N;
+            std::fprintf(stderr,
+                "best_break: reproducer verification = %d/%d goldens = "
+                "%.2f%%\n", goldens, VERIFY_N, 100.0 * rate);
+            if (firstGolden < 0) {
+                std::fprintf(stderr,
+                    "best_break: ZERO goldens at the optimal params in "
+                    "%d seeds -- reproducer mismatch; refusing to render "
+                    "a misleading gif.\n", VERIFY_N);
+                return 3;
+            }
+            usedSeed = (unsigned)firstGolden;
+            std::fprintf(stderr,
+                "best_break: rendering first-golden seed = %u\n",
+                usedSeed);
+            // Append the verified rate to golden_best.txt so the plotter
+            // can show the unbiased number alongside the search's biased
+            // point estimate (selection-bias correction).
+            if (std::FILE* f = std::fopen("docs/golden_best.txt", "a")) {
+                std::fprintf(f, "pGoldVerified %.5f\n", rate);
+                std::fprintf(f, "verifySeeds %d\n", VERIFY_N);
+                std::fprintf(f, "verifyGoldens %d\n", goldens);
+                std::fprintf(f, "renderSeed %u\n", usedSeed);
+                std::fclose(f);
+            }
+        }
+        World w = buildBreak(usedSeed);
         emitHeader(js, w);
-        const int ci = cueIdx(w.balls);
-        if (cueX > 0.0) w.balls[ci].r.x = cueX;
-        if (cueZ > 0.0) w.balls[ci].r.z = cueZ;
-        Vec3 apex = w.balls[ci].r;
-        for (const Ball& b : w.balls) if (b.id == 1) apex = b.r;
-        apex.z += aimDz;
-        Vec3 aim = apex - w.balls[ci].r; aim.y = 0; aim = aim.normalized();
-        cueStrike(w.balls[ci], aim, speed, tipA, tipB);
         tAcc += emitShot(js, w, tAcc, first);
         emitFooter(js);
     } else {

@@ -51,9 +51,11 @@ def slice_at(rows, fixed, tol=1e-5):
 
 def heatmap_2d(ax, rows, xkey, ykey, vkey, title, xlabel, ylabel,
                star=None, xfmt=None, yfmt=None, vmax=None):
-    """Heatmap on the (xkey, ykey) marginal of `rows`. xfmt/yfmt are
-    optional (value -> string) functions for tick labels (e.g. divide
-    by R to express in ball radii). `star` is plotted in DATA coords."""
+    """Heatmap on the (xkey, ykey) marginal of `rows`. Uses BILINEAR
+    interpolation (bicubic overshoots [0, 1] on a probability field).
+    Overlays the actual sample points as dots so the viewer can see
+    where the data really came from -- honesty about the grid
+    resolution."""
     import numpy as np
     xs = sorted({r[xkey] for r in rows})
     ys = sorted({r[ykey] for r in rows})
@@ -63,7 +65,14 @@ def heatmap_2d(ax, rows, xkey, ykey, vkey, title, xlabel, ylabel,
     im = ax.imshow(
         Z * 100, origin="lower", aspect="auto",
         extent=[xs[0], xs[-1], ys[0], ys[-1]],
-        cmap="viridis", vmin=0, vmax=vmax)
+        cmap="viridis", vmin=0, vmax=vmax,
+        interpolation="bilinear")
+    # Show where the actual grid samples live (every (xs[j], ys[i])).
+    for x in xs:
+        for y in ys:
+            ax.plot([x], [y], marker=".", color="white",
+                    markersize=2.5, markeredgecolor="black",
+                    markeredgewidth=0.3, zorder=4)
     ax.set_xticks(xs)
     ax.set_yticks(ys)
     ax.set_xticklabels([(xfmt or "{:.2f}".format)(x) for x in xs],
@@ -110,7 +119,13 @@ def draw_table(ax, best, rows, table_xMax=2.54, table_zMax=1.27,
         ax.imshow(
             Z, origin="lower", aspect="auto",
             extent=[xs[0], xs[-1], zs[0], zs[-1]],
-            cmap="viridis", alpha=0.75, vmin=0, vmax=vmax_pct, zorder=2)
+            cmap="viridis", alpha=0.78, vmin=0, vmax=vmax_pct, zorder=2,
+            interpolation="bilinear")
+        for x in xs:
+            for z in zs:
+                ax.plot([x], [z], marker=".", color="white",
+                        markersize=3, markeredgecolor="black",
+                        markeredgewidth=0.3, zorder=3.5)
     # Pockets
     pr = 2.0 * R
     for px in (0, table_xMax / 2, table_xMax):
@@ -285,12 +300,19 @@ def main() -> int:
     axC = fig.add_subplot(gs[1, 1])
     draw_tip(axC, best)
 
-    sup = (f"golden_break sweep -- best in grid: cue=({best['cueX']:.2f}, "
-           f"{best['cueZ']:.2f}) m, aim {best['aimDz']/R:+.2f} R, "
-           f"v={best['speed']:.0f} m/s, "
-           f"spin (a, b)=({best['a']/R:+.2f}, {best['b']/R:+.2f}) R   |   "
-           f"P(gold) = {best['pGold']*100:.1f}%")
-    fig.suptitle(sup, fontsize=10, y=0.995)
+    params = (f"best in grid: cue=({best['cueX']:.2f}, "
+              f"{best['cueZ']:.2f}) m, aim {best['aimDz']/R:+.2f} R, "
+              f"v={best['speed']:.0f} m/s, "
+              f"spin (a, b)=({best['a']/R:+.2f}, {best['b']/R:+.2f}) R")
+    if "pGoldVerified" in best:
+        rate_line = (f"P(gold) = {best['pGoldVerified']*100:.1f}%  "
+                     f"({int(best['verifyGoldens'])}/"
+                     f"{int(best['verifySeeds'])} verified, "
+                     f"bias-corrected; search-reported "
+                     f"{best['pGold']*100:.1f}% was upward-biased)")
+    else:
+        rate_line = f"search-reported P(gold) = {best['pGold']*100:.1f}%"
+    fig.suptitle(params + "\n" + rate_line, fontsize=10, y=0.998)
 
     out = Path("docs/golden_break.png")
     fig.savefig(out, dpi=150, bbox_inches="tight")

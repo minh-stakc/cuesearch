@@ -41,33 +41,48 @@ particle system.*
 
 ### Golden-break parameter search
 
-A "golden break" pots the 9 on the break shot — instant win in 9-ball.
-The WPA rule lets the breaker place the cue **anywhere behind the head
-string** (the 2nd diamond from the shooter's short rail). That's a
-6-dimensional decision space: cue X, cue Z, aim cut on the 1, cue
-speed, side spin, follow/draw.
+A "golden break" pots the 9 on the break shot — instant win in 9-ball
+and one of the rarest events in the game. The WPA rule lets the
+breaker place the cue **anywhere behind the head string** (the 2nd
+diamond from the shooter's short rail), so the decision space is
+6-D: cue X, cue Z, aim cut on the 1, cue speed, side spin,
+follow/draw.
 
 `tools/golden_break.cpp` sweeps the legal grid, runs N noisy breaks
-per cell (rack jitter + calibrated aim/speed noise, **not** perfect
+per cell (rack jitter + calibrated aim/speed noise — **not** perfect
 execution), and reports the cell that maximises P(gold) with a
-two-stage tournament (4× samples on the top-10) and a Wilson 95% CI.
-`viz/plot_golden_break.py` renders the full grid as a 4-panel figure:
-position heatmap, aim/speed heatmap, overhead table cartoon with the
-optimal shot drawn, and the cue-ball tip cross-section.
+two-stage tournament (4× samples on the top-10) and a Wilson 95 % CI.
+`viz/plot_golden_break.py` renders the full grid as a figure with the
+P(gold) heatmap **overlaid directly on the table kitchen** plus
+sensitivity panels for (speed × aim cut) and the cue-ball tip
+cross-section. Bilinear interpolation smooths the visual; tiny white
+dots mark where the actual grid samples live.
 
 ![golden break](docs/golden_break.png)
 
-Search result on the committed grid (`--samples 50`, 2025 cells, stage-2
-200 samples on the top-10): the winning cell is cue ball at
-**x ≈ 0.15 m / z ≈ 0.90 m** (close to a long rail, well inside the
-kitchen), aim with a slight left cut on the 1 (−0.30 R), speed **11
-m/s** (the classic controlled-break tempo), **no side spin**, light
-draw. Best-in-grid **P(gold) = 4.0%, 95 % CI [2.0 %, 7.7 %]** — just
-above the 1–3 % pro tournament reference band, which means the engine's
-break model is plausible but mildly optimistic; tightening that gap is
-exactly what `BR-2` (spread-plausibility validation) is for.
+**Result.** The search winner is cue ball at **x ≈ 0.15 m / z ≈ 0.90 m**
+(close to a long rail, well inside the kitchen), aim with a slight cut
+on the 1 (−0.30 R), speed **11 m/s** (the classic controlled-break
+tempo), **no side spin**, light draw. This is the canonical
+**wing-ball break** of real 9-ball: hit the 1 a hair off-centre from
+a side-rail position so a wing ball caroms into the 9 — because the 9
+sits in the rack centre and the cue can't strike it directly. The
+search rediscovered this from physics alone, with no human-coded
+heuristic.
 
-Replaying the winning parameters with `trace_shot best_break`:
+**P(gold) = 1.1 %** (verified, 11/1000 trials at the optimum). The
+search's first-pass point estimate was 4.0 % with CI [2.0 %, 7.7 %];
+a 1000-seed unbiased re-evaluation at the winning cell measured 1.1 %.
+The ~4× shrinkage is **stage-1 selection bias** — picking the
+single-best cell of 2025 inflates its sampled rate. The honest 1.1 %
+lands in the same single-digit-percent territory as observed pro
+tournament rates: golden breaks are *rare in real life too*. The
+methodology surfaced its own bias (advisor-flagged before the gif was
+rendered) rather than shipping the inflated number; that's the
+contribution.
+
+The optimal break replayed (seed-130, one of the verified golden 1.1 %
+outcomes — the 9 pockets at t ≈ 9.6 s, no scratch):
 
 ![best break](docs/best_break.gif)
 
@@ -75,24 +90,27 @@ Honest framing baked into the tool's output:
 
 - The reported number is **P(gold | this engine's break model)**. The
   break model is not yet validated against tournament break statistics
-  (that's `BR-2` in [`docs/BREAK_AND_RUN.md`](docs/BREAK_AND_RUN.md)).
-  Tournament reference for pros is ~1–3% — printed alongside so the
-  reader can sanity-check the engine.
+  (that's `BR-2` in [`docs/BREAK_AND_RUN.md`](docs/BREAK_AND_RUN.md));
+  observed pro-tournament golden-break rates are single-digit percent,
+  which the verified 1.1 % is consistent with.
 - "Legal break" is approximated as no foul (cue hit the 1 first, no
   scratch). The exact WPA *4-balls-to-a-rail-when-nothing-pocketed*
   clause needs rail-contact instrumentation; at the speeds searched
   any non-pot non-scratch shot drives the rack to the rails, so the
   simplification is approximately tight (stated in the output).
-- Displayed P(gold) is **best-in-grid** — a faint upward selection
-  bias from picking the stage-1 max remains even after the 4× re-eval,
-  which the tool's preamble calls out.
+- The search's point estimate is **best-in-grid** — `trace_shot
+  best_break` runs a 1000-seed bias-corrected verification at the
+  chosen cell before rendering, writes the verified rate back to
+  `docs/golden_best.txt`, and refuses to render a misleading gif if
+  the reproducer rate is zero.
 
 Run it yourself:
 
 ```bash
 ./build/golden_break --samples 50            # ~10 min, ~2k cells
 python viz/plot_golden_break.py              # docs/golden_break.png
-./build/trace_shot best_break > best.json    # the winner as a shot
+./build/trace_shot best_break > best.json    # also verifies + writes
+                                             # the bias-corrected rate
 python viz/render.py best.json docs/best_break.gif
 ```
 

@@ -6,3 +6,11 @@ speed 11.000
 a     0.00000
 b     -0.00857
 pGold 0.0400
+pGoldVerified 0.01100
+verifySeeds 1000
+verifyGoldens 11
+renderSeed 130
+pGoldVerified 0.01100
+verifySeeds 1000
+verifyGoldens 11
+renderSeed 130
