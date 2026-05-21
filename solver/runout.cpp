@@ -302,6 +302,13 @@ double g_mcSpeedSigma = k::SPEED_SIGMA;
 bool g_useRescue = false;
 int g_rescueSamples = 16;
 double g_rescueMinPot = 0.05;
+// BR-3: noise-aware depth-2 recursion sample count. When >0, the
+// depth-2 recursion samples c.after over K noisy executions of shot 1
+// and averages the recursive nxt.value -- so the planner ranks shot 1
+// by E[future chain value | NOISY shot-1 execution] rather than by
+// "chain value if shot 1 executes perfectly." Default 0 (preserves
+// the bit-exact noiseless-recursion behaviour for the 22-suite battery).
+int g_deepSamples = 0;
 
 // BR-2 helper: build Kick/Bank rescue candidates for legal target `t`
 // by reusing solver/solver.cpp::candidateShots (which generates the
@@ -445,18 +452,52 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
               [](const Cand& a, const Cand& b) { return a.lvl1 > b.lvl1; });
     if ((int)cands.size() > beamK) cands.resize(beamK);
 
-    // Level 2: expand the beam one more ball (recurse on the modal leave).
-    // BR-1's mc.valueMC is the noise-aware depth-1 lookahead; the recursive
-    // depth-2 call uses the noiseless c.after (a known approximation).
-    // Combining both: rank by depth-1 noise + depth-2 noiseless. Empirically
-    // this beats either alone (the depth-2 recursion adds ~10 pp B&R rate
-    // even under noise because it surfaces long-chain candidates that the
-    // depth-1 mobility heuristic can't see four shots out).
+    // Level 2: expand the beam one more ball. Default behaviour: recurse
+    // on the NOISELESS c.after (preserves the 22-suite regression). BR-3
+    // (g_deepSamples > 0): sample c.after over noisy shot-1 executions,
+    // recurse on each, average the recursive nxt.value. This gives the
+    // planner E[future chain value | noisy shot 1] -- the correct ranker
+    // for the chain-survival-under-noise objective the harness measures.
     double best = -1.0;
     for (Cand& c : cands) {
         double v;
         if (depth <= 1 || legalTarget(c.after.balls) < 0) {
             v = c.lvl1;
+        } else if (g_deepSamples > 0) {
+            double sum = 0.0;
+            int hits = 0;
+            for (int s = 0; s < g_deepSamples; ++s) {
+                const unsigned dseed =
+                    (unsigned)((c.shot.targetId * 1009 +
+                                c.shot.pocket * 17 +
+                                (int)s * 2654435761u) | 1u);
+                std::mt19937 rng(dseed);
+                std::normal_distribution<double> nA(0.0, g_mcAimSigma);
+                std::normal_distribution<double> nS(0.0, g_mcSpeedSigma);
+                const double th = nA(rng), co = std::cos(th), si = std::sin(th);
+                const Vec3 aimN{c.shot.shot.aim.x * co + c.shot.shot.aim.z * si,
+                                0.0,
+                                -c.shot.shot.aim.x * si +
+                                    c.shot.shot.aim.z * co};
+                const double vN = c.shot.shot.speed * (1.0 + nS(rng));
+                World noisy = w;
+                cueStrike(noisy.balls[ci], aimN, vN,
+                          c.shot.shot.a, c.shot.shot.b);
+                ShotOutcome o = simulateShot(noisy);
+                bool potted = false;
+                for (int id : o.pocketed)
+                    if (id == c.shot.targetId &&
+                        o.foul == Foul::None) potted = true;
+                if (!potted) continue;
+                if (legalTarget(noisy.balls) < 0) {
+                    sum += 1.0;
+                } else {
+                    RunOutPlan nxt = planRunOut(noisy, depth - 1, beamK);
+                    sum += nxt.defensive ? 0.0 : nxt.value;
+                }
+                ++hits;
+            }
+            v = (hits > 0) ? (sum / g_deepSamples) : 0.0;
         } else {
             RunOutPlan nxt = planRunOut(c.after, depth - 1, beamK);
             v = c.pPot * (legalTarget(c.after.balls) < 0
@@ -478,6 +519,10 @@ void setUseMcScoring(bool on, int nSamples, double aimSigma,
     g_mcSamples = std::max(2, nSamples);
     g_mcAimSigma = std::max(0.0, aimSigma);
     g_mcSpeedSigma = std::max(0.0, speedSigma);
+}
+
+void setDeepSamples(int nSamples) {
+    g_deepSamples = std::max(0, nSamples);
 }
 
 void setUseRescueShots(bool on, int nSamples, double minPotMC) {

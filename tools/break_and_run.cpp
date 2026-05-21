@@ -218,6 +218,7 @@ int main(int argc, char** argv) {
     bool useBr2 = false;
     int br2Samples = 16;
     double br2MinPot = 0.05;
+    int deepSamples = 0;
     double execAimSigma = k::AIM_SIGMA;
     double execSpeedSigma = k::SPEED_SIGMA;
     double brkAimSigma = k::AIM_SIGMA;
@@ -274,11 +275,14 @@ int main(int argc, char** argv) {
             brkAimSigma = std::stod(argv[++i]);
         else if (a == "--break-speed-sigma" && i + 1 < argc)
             brkSpeedSigma = std::stod(argv[++i]);
+        else if (a == "--deep" && i + 1 < argc)
+            deepSamples = std::stoi(argv[++i]);
     }
     // Match planner's MC noise to execution noise so the planner's
     // ranking of "noise-robust" candidates uses the correct distribution.
     setUseMcScoring(useBr1, br1Samples, execAimSigma, execSpeedSigma);
     setUseRescueShots(useBr2, br2Samples, br2MinPot);
+    setDeepSamples(deepSamples);
 
     // Production-grade difficulty table (mirrors RO-4); built once.
     difficultyMut().buildOrLoad("difficulty_br.bin", 80);

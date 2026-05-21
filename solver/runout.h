@@ -92,4 +92,15 @@ void setUseMcScoring(bool on, int nSamples = 12,
 void setUseRescueShots(bool on, int nSamples = 16,
                        double minPotMC = 0.05);
 
+// BR-3: noise-aware depth-2 recursion. The default depth-2 path
+// recurses on the NOISELESS post-shot state, so the planner ranks
+// shot 1 by "shot 1 leaves a great noiseless shot 2." Under any
+// execution noise, the cue lands at a slightly different position
+// than the noiseless target -- the planner's chosen shot 2 may no
+// longer work. Setting nSamples > 0 makes the recursion sample K
+// noisy executions of shot 1, recurse on each, and average the
+// recursive nxt.value -- ranking shot 1 by E[future chain value |
+// noisy shot 1]. Default 0 (off), preserves the 22-suite regression.
+void setDeepSamples(int nSamples);
+
 }  // namespace cue
