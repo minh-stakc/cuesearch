@@ -109,3 +109,55 @@ the literature's low-pro band), reported with the full audit trail
 
 A null/negative result here is a valid, publishable outcome and is worth
 more to the profile than a p-hacked 15%.
+
+---
+
+## Diagnostic baselines (NOT the gate)
+
+These are measurements made BEFORE any of BR-1..BR-3 architectural
+work is in place. They are diagnostic — they tell us WHERE the
+plateau is so the BR-1/2/3 effort can target the real bottleneck.
+They do NOT consume the binding stop condition; only the BR-final
+run (marked explicitly in its commit) does.
+
+### Baseline 1: 9c8d762 (engine fixes applied, no BR-1/2/3 work)
+
+`tools/break_and_run.cpp --trials 100`, textbook controlled break
+(cue at (0.30, 0.64), apex aim, 10 m/s, light follow 0.3R, no side),
+LOCKED, calibrated noise (AIM_SIGMA=0.0090, SPEED_SIGMA=0.05), rack
+jitter <=0.3 mm:
+
+| Metric | Result |
+|---|---|
+| Legal-break rate | 79/100 (79 %) — inside the 60-90 % tournament band |
+| Mean balls on break | 0.82 — tournament-plausible (~0-2 typical) |
+| Golden break on break | 3/100 (3 %) — matches pro single-digit reference |
+| **B&R rate** | **3/100 (3 %), 95 % CI [1.0 %, 8.5 %]** |
+| Multi-shot run-out (Cleared) | 0/100 — the capability gap |
+
+Plateau by terminal cause:
+- **SafetyBail 58 %** — the dominant blocker. The planner abandons
+  the run-out on the first shot because it can't find a clean shot
+  on the legal target from the cue's post-break position.
+- IllegalBreak 21 % (matches the 21 % non-legal breaks).
+- Miss 12 % (planner found a shot; missed under noise).
+- Scratch / WrongBallFirst / NoContact = 6 % combined.
+
+Chain-length distribution after legal break: 70 trials chain 0,
+4 chain 1, 2 chain 2, 0 chain 3+. The planner gets blocked very
+early on a typical scattered table.
+
+**Interpretation.** The plateau is at the *post-break run-out*, not
+at the break itself. The break model produces tournament-plausible
+spreads. The bottleneck is the planner finding/executing the first
+makeable shot from whatever the break leaves. **This is exactly the
+diagnosis BR-1 (per-candidate Monte-Carlo-over-noise) was
+pre-registered to address**: the current noiseless difficulty-table
+lookup is rejecting shots as defensive that an MC-over-noise scorer
+might reveal as playable. Engineering judgment: BR-1 is the right
+next named lever.
+
+The break model's legal-break rate (79 %) and mean-balls-on-break
+(0.82) already pass BR-2's spread-plausibility sniff test; BR-2's
+remaining work is the full validation (rail-contact instrumentation
+for the WPA legal-break definition).
