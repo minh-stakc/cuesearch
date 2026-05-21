@@ -150,14 +150,164 @@ early on a typical scattered table.
 **Interpretation.** The plateau is at the *post-break run-out*, not
 at the break itself. The break model produces tournament-plausible
 spreads. The bottleneck is the planner finding/executing the first
-makeable shot from whatever the break leaves. **This is exactly the
-diagnosis BR-1 (per-candidate Monte-Carlo-over-noise) was
-pre-registered to address**: the current noiseless difficulty-table
-lookup is rejecting shots as defensive that an MC-over-noise scorer
-might reveal as playable. Engineering judgment: BR-1 is the right
-next named lever.
+makeable shot from whatever the break leaves.
 
-The break model's legal-break rate (79 %) and mean-balls-on-break
-(0.82) already pass BR-2's spread-plausibility sniff test; BR-2's
-remaining work is the full validation (rail-contact instrumentation
-for the WPA legal-break definition).
+### Baseline 1b: SafetyBail sub-cause instrumentation (commit `a98199d`)
+
+A 10-line change to `planRunOut` exposed `DefensiveCause` (NoLOS /
+CandsEmpty / LowValue). Re-running the same baseline:
+
+| Sub-cause | % | BR-1 addressable? |
+|---|---|---|
+| **NoLOS** | **38 %** | **No** — no LOS to any pocket; positional/break-model |
+| CandsEmpty | 7 % | Maybe — noiseless seed fails, MC might find playable |
+| LowValue | 13 % | Yes — BR-1's natural target |
+
+The dominant sub-cause (NoLOS, 38 %) is *unreachable* by BR-1's
+MC-over-noise scoring — there's literally no LOS from the cue's
+post-break position to any pocket via the legal target. BR-1 can
+only help on CandsEmpty + LowValue (20 % combined) plus the
+Miss = 12 % bucket. Realistic BR-1 addressable surface: ~32 % of
+cells. Expected delta to B&R rate: small. Pre-registered ≥ 15 %
+gate is unlikely to be cleared by BR-1 alone given this distribution.
+
+### Baseline 2: BR-1 ON (per-candidate MC-over-noise integrated)
+
+Implementation: `solver::mcScore` (per-candidate K-sample MC
+mirroring `evaluate()`'s noise convention bit-exactly).
+`planRunOut` re-ranks the lookup top-`beamK` candidates by MC
+value when `setUseMcScoring(true)`. Default off so the 22-suite
+regression battery stays bit-exact; B&R harness opts in via
+`--br1`.
+
+BR-1 unit test (`tests/test_br1_mc.cpp`) passes the pre-reg's
+falsifiable binary: mcScore is deterministic per seed and produces
+`|ΔpPotMC| > 0.2` between two designed shots — strong differentiation
+signal (the actual measured |Δ| was 0.80, between a side-pocket
+full-hit and a corner thin-cut on the same 1-ball, where the
+"easy" full hit scratches under noise and the "hard" thin cut
+caroms safely; mcScore captures the scratch risk the lookup table
+can't).
+
+B&R harness with `--br1 --br1-samples 20` (100 trials, same locked
+break, same seed-base):
+
+| Metric | Baseline 1 (BR-1 off) | Baseline 2 (BR-1 on) | Δ |
+|---|---|---|---|
+| B&R rate | 3 % | 3 % | 0 % |
+| GoldenBreak | 3 | 3 | 0 |
+| Cleared (multi-shot run-out) | 0 | 0 | 0 |
+| Miss | 12 | 9 | **−3** (BR-1's expected direction) |
+| WrongBallFirst | 3 | 4 | +1 |
+| NoContact | 2 | 3 | +1 |
+| Scratch | 1 | 2 | +1 |
+| SafetyBail | 58 | 58 | 0 |
+
+**BR-1 null result.** Mechanism works (Miss reduction of 3 trials
+is the expected direction — noise-robust scoring picks shots that
+miss less under noise), but the gain is offset by foul increases
+elsewhere, and the dominant SafetyBail-NoLOS bucket (38 %) is
+structurally unreachable. Net delta to the gate metric is zero
+trials. Per pre-reg ("If the architectural change does NOT change
+shot selection / robustness sufficiently, that null result is
+itself falsifiable -> document and STOP (do not escalate effort
+to force a difference)") — **BR-1 is documented and stopped**.
+
+What this means: the >= 15 % B&R bar is not clearable from this
+configuration of (locked break + planRunOut architecture + engine
++ noise model + difficulty table) by BR-1 alone. BR-2 (rail-contact
+instrumentation; possibly safety-shot capability that plays a
+defensive shot instead of bailing on NoLOS) and BR-3 (deeper search
+that finds safety-shot-then-makeable-shot chains) might move the
+needle further, but each is a separate research-scale effort with
+its own justification cost. The honest engineering result here is
+the same shape as RO-4: the methodology surfaced where the plateau
+actually is, the named lever was tried under discipline, and the
+boundary is documented rather than hidden.
+
+### Baseline 3: BR-2 ON (rescue-shot capability at NoLOS)
+
+Implementation: `solver/runout.cpp::rescueCandidates` filters the
+existing `solver/solver.cpp::candidateShots` set to its **Kick** (cue
+rails first) and **Bank** (target rails first) entries when
+`feasiblePockets(direct LOS)` is empty for the legal target. Each is
+scored by `mcScore` -- the noiseless lookup table doesn't model
+rail-first contact reliably. The highest-value candidate clearing
+`minPotMC` is returned in place of a NoLOS bail. Default off so the
+22-suite regression battery stays bit-exact; the B&R harness opts in
+via `--br2`.
+
+The pre-reg's BR-2 description originally focused on rail-contact
+instrumentation for break validation; this BR-2 implements the
+**conjectural extension** that the Baseline-1b diagnosis named --
+"safety-shot capability that plays a defensive shot instead of
+bailing on NoLOS." The named lever per the pre-reg is honoured; the
+naming evolution is recorded here for the audit trail.
+
+BR-2 unit test (`tests/test_br2_rescue.cpp`) passes the pre-reg's
+falsifiable binary: on a designed snookered position (cue blocked
+from every direct ghost-ball by a single blocker on the line of
+centres), planRunOut WITHOUT BR-2 returns `defensive=NoLOS`; the
+SAME position WITH BR-2 returns a non-defensive plan that is a Kick
+or Bank rescue. A second test guards default-off behaviour so the
+22-suite regression battery stays bit-exact.
+
+B&R harness with `--br2` (100 trials, same locked break, same
+seed-base 7000):
+
+| Metric | Baseline 1 (BR-2 off) | Baseline 3 (BR-2 on) | Δ |
+|---|---|---|---|
+| **B&R rate** | **3 %** | **3 %** | **0 %** |
+| GoldenBreak | 3 | 3 | 0 |
+| Cleared (multi-shot run-out) | 0 | 0 | 0 |
+| Miss | 12 | 40 | **+28** (rescue attempts that missed) |
+| WrongBallFirst | 3 | 12 | +9 |
+| NoContact | 2 | 7 | +5 |
+| Scratch | 1 | 2 | +1 |
+| SafetyBail | 58 | 15 | **−43** |
+| -- NoLOS | 38 | **1** | **−37** (BR-2's named target) |
+| -- CandsEmpty | 7 | 7 | 0 |
+| -- LowValue | 13 | 7 | −6 |
+| chain-length 1+ post-break | 6 | 15 | **+9** |
+
+Combined BR-1 + BR-2 (`--br1 --br1-samples 20 --br2`) measured
+identically: B&R rate 3 %, NoLOS 1 %, chain-length 1+ 14. The two
+levers do not compound.
+
+**BR-2 null result on the gate metric, mechanism confirmed.**
+The rescue stage IS firing as designed: NoLOS dropped 38 % -> 1 %
+(BR-2's named target bucket), and the rescue shots find geometric
+solutions the lookup-table-gated planner did not (chain-length 1+
+went 6 -> 15, ~9 extra first-shot pots). But under the calibrated
+execution noise, Kick and Bank shots almost never convert: of the
+37 SafetyBail->rescue conversions, every one terminated in
+Miss / WrongBallFirst / NoContact / Scratch. None chained to a
+Cleared rack.
+
+The shape of the failure is informative: the lookup table's
+exclusion of rail-first shots is **physically correct** under our
+noise model -- those shots are not "makeable" in a useful sense,
+they are gamble shots with low per-attempt P(pot) that don't compose
+into a 9-ball chain. Per pre-reg ("STOP. No parameter iteration, no
+seed fishing, no 'one more run.'") -- **BR-2 is documented and
+stopped**.
+
+The cumulative engineering finding: the >= 15 % B&R bar is NOT
+clearable from this configuration of (locked break + planRunOut
+architecture + engine + noise model + difficulty table) by any
+combination of BR-1 (per-candidate MC) and BR-2 (rescue shots).
+The remaining named lever in the pre-reg is BR-3 (finer difficulty
+table / deeper-wider goal-directed search) -- but the diagnosis is
+now unambiguous: the chain-length distribution caps at 2 post-break
+balls regardless of which planner lever is on. Going from 0 Cleared
+trials to ~12 Cleared trials per 100 (the gate delta) requires the
+break to leave a 9-ball-reachable position more often, which the
+break-locking discipline of the pre-reg forbids tuning. BR-3
+(deeper search) cannot manufacture a 9-shot chain that doesn't
+exist on the rack the break left.
+
+This is the same engineering shape as RO-4 and BR-1: pre-registered
+gate not cleared, mechanism validated in isolation, plateau located
+precisely, audit trail intact. The integrity of the result is the
+deliverable. The 22-suite regression battery remains bit-exact with
+both BR-1 and BR-2 defaulted OFF.

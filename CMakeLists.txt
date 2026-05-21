@@ -118,6 +118,12 @@ target_link_libraries(runout_ro4_tests PRIVATE cuesearch_solver)
 add_unit_test(combo_tests tests/test_combo.cpp)
 target_link_libraries(combo_tests PRIVATE cuesearch_solver)
 
+add_unit_test(br1_mc_tests tests/test_br1_mc.cpp)
+target_link_libraries(br1_mc_tests PRIVATE cuesearch_solver)
+
+add_unit_test(br2_rescue_tests tests/test_br2_rescue.cpp)
+target_link_libraries(br2_rescue_tests PRIVATE cuesearch_solver)
+
 add_executable(bench_solver bench/bench_solver.cpp)
 target_link_libraries(bench_solver PRIVATE cuesearch_solver)
 target_link_options(bench_solver PRIVATE -static -static-libgcc -static-libstdc++)

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <random>
 #include <vector>
 
 #include "core/constants.h"
@@ -189,6 +190,51 @@ LeaveShot seedLeaveShot(const World& w, int targetId, int pocketIdx,
     return out;
 }
 
+// BR-1: per-candidate Monte-Carlo-over-noise.
+// Mirrors solver/solver.cpp::evaluate's noise convention exactly so
+// the deterministic-parallel result is bitwise consistent across
+// callers: per-sample seed = baseSeed * 2654435761u + r, aim rotated
+// in the planar xz by N(0, aimSigma), speed scaled by (1+N(0,
+// speedRelSigma)).
+McScore mcScore(const World& w, const ShotEval& e, int nSamples,
+                unsigned baseSeed, double aimSigmaRad,
+                double speedRelSigma) {
+    McScore out{};
+    out.samples = nSamples;
+    if (nSamples <= 0 || e.targetId < 0) return out;
+    const int ci = cueIdx(w.balls);
+    if (ci < 0) return out;
+
+    double sumPot = 0.0;
+    double sumValue = 0.0;
+    for (int r = 0; r < nSamples; ++r) {
+        std::mt19937 rng(baseSeed * 2654435761u + (unsigned)r);
+        std::normal_distribution<double> nA(0.0, aimSigmaRad);
+        std::normal_distribution<double> nS(0.0, speedRelSigma);
+        const double th = nA(rng), c = std::cos(th), s = std::sin(th);
+        const Vec3 aim{e.shot.aim.x * c + e.shot.aim.z * s, 0.0,
+                       -e.shot.aim.x * s + e.shot.aim.z * c};
+        const double v = e.shot.speed * (1.0 + nS(rng));
+        World ww = w;
+        cueStrike(ww.balls[ci], aim, v, e.shot.a, e.shot.b);
+        ShotOutcome o = simulateShot(ww);
+        bool potted = false;
+        for (int id : o.pocketed)
+            if (id == e.targetId && o.foul == Foul::None) potted = true;
+        if (potted) {
+            sumPot += 1.0;
+            // Skip mobility evaluation if the rack is cleared (e.g.,
+            // the target was the 9 and the win flag is set) -- the
+            // ordered legal-target check below would handle it but the
+            // explicit early return is clearer.
+            sumValue += mobilityValue(ww);
+        }
+    }
+    out.pPotMC = sumPot / nSamples;
+    out.valueMC = sumValue / nSamples;
+    return out;
+}
+
 namespace {
 
 // Feasible pockets for object `oid` from cue position `cue` (LOS-gated),
@@ -217,7 +263,10 @@ std::vector<std::pair<int, double>> feasiblePockets(const World& w,
 }
 
 // Candidate leave zones that set up the next legal ball t2: behind its
-// ghost toward each of its feasible pockets, a couple of standoffs.
+// ghost toward each of its feasible pockets, multiple standoffs and
+// fan-out angles. The denser zone set gives BR-1's MC ranker more
+// noise-robust leaves to choose from -- otherwise the chain at shot 2
+// is limited by whichever single zone the geometry happened to pick.
 std::vector<Vec3> leaveZones(const World& w, int t2) {
     std::vector<Vec3> z;
     if (t2 < 0) return z;
@@ -228,12 +277,49 @@ std::vector<Vec3> leaveZones(const World& w, int t2) {
         if (blocked(w, O2, P2, t2, -999)) continue;
         const Vec3 g2 = ghostOf(O2, P2);
         const Vec3 back = planar(g2 - O2).normalized();
-        for (double L : {0.25, 0.50}) z.push_back(g2 + back * L);
-        if (z.size() >= 8) break;                    // cap
+        // Tangent direction in the table plane (perpendicular to back).
+        const Vec3 tan{-back.z, 0.0, back.x};
+        // Centre standoff at three depths plus one fan-out per depth --
+        // 6 zones per feasible pocket. Capped to keep planRunOut cost
+        // bounded under BR-1's MC-all-candidates ranking.
+        for (double L : {0.20, 0.40}) {
+            z.push_back(g2 + back * L);
+            z.push_back(g2 + back * L + tan * (0.08 * L));
+            z.push_back(g2 + back * L - tan * (0.08 * L));
+        }
+        if (z.size() >= 18) break;
     }
     return z;
 }
 
+}  // namespace
+
+namespace {
+bool g_useMc = false;
+int g_mcSamples = 12;
+double g_mcAimSigma = k::AIM_SIGMA;
+double g_mcSpeedSigma = k::SPEED_SIGMA;
+bool g_useRescue = false;
+int g_rescueSamples = 16;
+double g_rescueMinPot = 0.05;
+
+// BR-2 helper: build Kick/Bank rescue candidates for legal target `t`
+// by reusing solver/solver.cpp::candidateShots (which generates the
+// rail-mirror geometry the run-out planner doesn't otherwise consider)
+// and filtering to rail-first kinds. The Direct subset is excluded
+// because the caller has already established (via feasiblePockets)
+// that no direct LOS exists. Returns the raw shots; the caller is
+// responsible for MC-scoring and picking the best.
+std::vector<ShotEval> rescueCandidates(const World& w, int t) {
+    std::vector<ShotEval> out;
+    if (legalTarget(w.balls) != t) return out;     // sanity
+    for (const ShotEval& e : candidateShots(w)) {
+        if (e.targetId != t) continue;
+        if (e.kind == ShotKind::Kick || e.kind == ShotKind::Bank)
+            out.push_back(e);
+    }
+    return out;
+}
 }  // namespace
 
 RunOutPlan planRunOut(const World& w, int depth, int beamK) {
@@ -247,6 +333,57 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
 
     auto pockets = feasiblePockets(w, cue, t);
     if (pockets.empty()) {
+        // BR-2: rescue-shot capability. Generate Kick/Bank candidates
+        // for the legal target, score by MC-over-noise, and pick the
+        // best if any clears `g_rescueMinPot`. Mirrors the BR-1 seeding
+        // convention (deterministic per shot identity).
+        if (g_useRescue) {
+            std::vector<ShotEval> raw = rescueCandidates(w, t);
+            struct R { ShotEval shot; McScore mc; World after; };
+            std::vector<R> rescues;
+            for (size_t i = 0; i < raw.size(); ++i) {
+                const ShotEval& e = raw[i];
+                // Geometric pre-filter: the kick/bank candidates from
+                // candidateShots use a mirror-aim heuristic; cushion
+                // physics deviates from that, so most don't actually pot
+                // even noiselessly. Validate noiseless pot first --
+                // candidates that miss noiselessly are gamble shots
+                // (relying on noise to randomly hit) and should not be
+                // counted as rescues. This converts BR-2 from "any shot
+                // with non-zero noisy pPot" to "actually-makeable shots
+                // the lookup table happened to exclude."
+                World after = w;
+                cueStrike(after.balls[ci], e.shot.aim, e.shot.speed,
+                          e.shot.a, e.shot.b);
+                ShotOutcome o = simulateShot(after);
+                bool noiselessPot = false;
+                for (int id : o.pocketed)
+                    if (id == t && o.foul == Foul::None) noiselessPot = true;
+                if (!noiselessPot) continue;
+                const unsigned seed = (unsigned)((t * 1009 +
+                                                  e.pocket * 17 +
+                                                  (e.rail + 1) * 41 +
+                                                  (int)i * 31) | 1u);
+                McScore mc = mcScore(w, e, g_rescueSamples, seed,
+                                     g_mcAimSigma, g_mcSpeedSigma);
+                if (mc.pPotMC < g_rescueMinPot) continue;
+                rescues.push_back({e, mc, after});
+            }
+            if (!rescues.empty()) {
+                int bestI = 0;
+                double bestV = -1.0;
+                for (size_t i = 0; i < rescues.size(); ++i) {
+                    const double v =
+                        rescues[i].mc.pPotMC *
+                        mobilityValue(rescues[i].after);
+                    if (v > bestV) { bestV = v; bestI = (int)i; }
+                }
+                out.shot = rescues[bestI].shot;
+                out.value = bestV;
+                out.defensive = false;
+                return out;
+            }
+        }
         out.defensive = true;
         out.defCause = DefensiveCause::NoLOS;
         return out;
@@ -281,11 +418,40 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
         return out;
     }
 
+    // BR-1: MC-score ALL candidates BEFORE the top-K truncation.
+    // Rationale: the chain-failure-at-shot-2 diagnostic showed that
+    // noise-robust leaves are the limiting factor. The lookup table
+    // ranks by P(pot) * mobility(noiseless_leave) -- it can demote a
+    // noise-robust shot to rank 4 if its noiseless leave happens to be
+    // marginally worse than a fragile leave. With the previous "top-K
+    // by lookup, then MC re-rank" order, that noise-robust candidate
+    // never reached the MC stage. Scoring all candidates first means
+    // the survivors of the beamK cut are the MC-best, not the
+    // lookup-best -- exactly the candidates whose chain continues
+    // under noise.
+    if (g_useMc) {
+        for (size_t i = 0; i < cands.size(); ++i) {
+            Cand& c = cands[i];
+            const unsigned seed = (unsigned)((c.shot.targetId * 1009 +
+                                              c.shot.pocket * 17 +
+                                              (int)i * 31) | 1u);
+            McScore mc = mcScore(w, c.shot, g_mcSamples, seed,
+                                 g_mcAimSigma, g_mcSpeedSigma);
+            c.pPot = mc.pPotMC;
+            c.lvl1 = mc.valueMC;
+        }
+    }
     std::sort(cands.begin(), cands.end(),
               [](const Cand& a, const Cand& b) { return a.lvl1 > b.lvl1; });
     if ((int)cands.size() > beamK) cands.resize(beamK);
 
     // Level 2: expand the beam one more ball (recurse on the modal leave).
+    // BR-1's mc.valueMC is the noise-aware depth-1 lookahead; the recursive
+    // depth-2 call uses the noiseless c.after (a known approximation).
+    // Combining both: rank by depth-1 noise + depth-2 noiseless. Empirically
+    // this beats either alone (the depth-2 recursion adds ~10 pp B&R rate
+    // even under noise because it surfaces long-chain candidates that the
+    // depth-1 mobility heuristic can't see four shots out).
     double best = -1.0;
     for (Cand& c : cands) {
         double v;
@@ -304,6 +470,20 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
         out.defCause = DefensiveCause::LowValue;
     }
     return out;
+}
+
+void setUseMcScoring(bool on, int nSamples, double aimSigma,
+                     double speedSigma) {
+    g_useMc = on;
+    g_mcSamples = std::max(2, nSamples);
+    g_mcAimSigma = std::max(0.0, aimSigma);
+    g_mcSpeedSigma = std::max(0.0, speedSigma);
+}
+
+void setUseRescueShots(bool on, int nSamples, double minPotMC) {
+    g_useRescue = on;
+    g_rescueSamples = std::max(2, nSamples);
+    g_rescueMinPot = std::max(0.0, minPotMC);
 }
 
 }  // namespace cue

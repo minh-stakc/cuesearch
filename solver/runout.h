@@ -47,6 +47,49 @@ struct RunOutPlan {
     bool defensive = false; // no makeable shot -> caller should play safe
     DefensiveCause defCause = DefensiveCause::None;
 };
+
+// BR-1: per-candidate Monte-Carlo-over-noise score. Replaces the
+// lookup-table P(pot) * mobility(modal_leave) with an MC estimate of
+// E[pot * mobility(after) | calibrated execution noise]. Per pre-reg
+// docs/BREAK_AND_RUN.md, this is the single biggest missing piece per
+// the Smith / CueCard literature.
+struct McScore {
+    double pPotMC;    // P(target pocketed legally | noise)
+    double valueMC;   // E[indicator(pot) * mobility(after_noisy)]
+    int samples;      // K
+};
+McScore mcScore(const World& w, const ShotEval& e, int nSamples,
+                unsigned baseSeed,
+                double aimSigmaRad = k::AIM_SIGMA,
+                double speedRelSigma = k::SPEED_SIGMA);
 RunOutPlan planRunOut(const World& w, int depth = 2, int beamK = 3);
+
+// BR-1 toggle. When true, planRunOut MC-scores ALL candidates over the
+// configured execution-noise sigmas (defaults to k::AIM_SIGMA /
+// k::SPEED_SIGMA), then ranks them by mc.valueMC. Default OFF so the
+// 22-suite regression battery stays bit-exact; B&R harness flips it on.
+// Pass execution-matched sigmas via the optional aim/speed arguments so
+// the planner's noise model matches the harness's execution noise --
+// otherwise the chain breaks at shot 2 because the planner ranked by a
+// noise distribution different from the one actually being run.
+void setUseMcScoring(bool on, int nSamples = 12,
+                     double aimSigma = k::AIM_SIGMA,
+                     double speedSigma = k::SPEED_SIGMA);
+
+// BR-2: rescue-shot capability for NoLOS positions. When the legal
+// target has no direct LOS to any pocket (cue->ghost or target->pocket
+// blocked for every pocket), instead of bailing immediately, expand the
+// search to include KICK (cue rails first) and BANK (target rails first)
+// candidates from solver/solver.cpp::candidateShots. Each is scored by
+// mcScore -- the noiseless lookup table doesn't model rail-first shots.
+// If any candidate's pPotMC exceeds minPotMC, the highest-value one is
+// returned and out.defensive stays false. Otherwise NoLOS is preserved.
+//
+// Pre-reg context (docs/BREAK_AND_RUN.md, Baseline 1b): NoLOS is 38 %
+// of B&R failures and explicitly named as BR-1-unaddressable / "the
+// next named lever" in the diagnosis. Default OFF; B&R harness opts in
+// via --br2.
+void setUseRescueShots(bool on, int nSamples = 16,
+                       double minPotMC = 0.05);
 
 }  // namespace cue

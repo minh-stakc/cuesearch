@@ -144,7 +144,8 @@ struct BreakOutcome {
     bool cueScratched;
 };
 
-BreakOutcome doBreak(World& w, const BreakSpec& bs, std::mt19937& rng) {
+BreakOutcome doBreak(World& w, const BreakSpec& bs, std::mt19937& rng,
+                     double aimSigma, double speedSigma) {
     const int ci = cueIdx(w);
     w.balls[ci].r.x = bs.cueX;
     w.balls[ci].r.z = bs.cueZ;
@@ -152,8 +153,8 @@ BreakOutcome doBreak(World& w, const BreakSpec& bs, std::mt19937& rng) {
     for (const Ball& b : w.balls) if (b.id == 1) apex = b.r;
     apex.z += bs.aimDz;
     Vec3 aim = apex - w.balls[ci].r; aim.y = 0; aim = aim.normalized();
-    std::normal_distribution<double> nA(0.0, k::AIM_SIGMA);
-    std::normal_distribution<double> nS(0.0, k::SPEED_SIGMA);
+    std::normal_distribution<double> nA(0.0, aimSigma);
+    std::normal_distribution<double> nS(0.0, speedSigma);
     const double th = nA(rng), c = std::cos(th), sn = std::sin(th);
     aim = {aim.x * c + aim.z * sn, 0.0, -aim.x * sn + aim.z * c};
     const double v = bs.speed * (1.0 + nS(rng));
@@ -212,6 +213,25 @@ int main(int argc, char** argv) {
     unsigned SEED_BASE = 7000u;
     bool ballInHand = false;
     bool verbose = false;
+    bool useBr1 = false;
+    int br1Samples = 12;
+    bool useBr2 = false;
+    int br2Samples = 16;
+    double br2MinPot = 0.05;
+    double execAimSigma = k::AIM_SIGMA;
+    double execSpeedSigma = k::SPEED_SIGMA;
+    double brkAimSigma = k::AIM_SIGMA;
+    double brkSpeedSigma = k::SPEED_SIGMA;
+    // Break parameter overrides (defaults match the LOCKED textbook break).
+    double brkCueX  = 0.30;
+    double brkCueZ  = 0.635;
+    double brkAimDz = 0.0;
+    double brkSpeed = 10.0;
+    double brkA     = 0.0;
+    double brkB     = 0.3 * k::R;
+    // Planner depth/beam (default matches the existing harness).
+    int planDepth = 2;
+    int planBeamK = 3;
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
         if (a == "--trials" && i + 1 < argc)
@@ -222,12 +242,54 @@ int main(int argc, char** argv) {
             SEED_BASE = (unsigned)std::stoul(argv[++i]);
         else if (a == "--ball-in-hand") ballInHand = true;
         else if (a == "-v" || a == "--verbose") verbose = true;
+        else if (a == "--br1") useBr1 = true;
+        else if (a == "--br1-samples" && i + 1 < argc)
+            br1Samples = std::stoi(argv[++i]);
+        else if (a == "--br2") useBr2 = true;
+        else if (a == "--br2-samples" && i + 1 < argc)
+            br2Samples = std::stoi(argv[++i]);
+        else if (a == "--br2-min-pot" && i + 1 < argc)
+            br2MinPot = std::stod(argv[++i]);
+        else if (a == "--aim-sigma" && i + 1 < argc)
+            execAimSigma = std::stod(argv[++i]);
+        else if (a == "--speed-sigma" && i + 1 < argc)
+            execSpeedSigma = std::stod(argv[++i]);
+        else if (a == "--break-cuex" && i + 1 < argc)
+            brkCueX = std::stod(argv[++i]);
+        else if (a == "--break-cuez" && i + 1 < argc)
+            brkCueZ = std::stod(argv[++i]);
+        else if (a == "--break-aim-dz" && i + 1 < argc)
+            brkAimDz = std::stod(argv[++i]);
+        else if (a == "--break-speed" && i + 1 < argc)
+            brkSpeed = std::stod(argv[++i]);
+        else if (a == "--break-side" && i + 1 < argc)
+            brkA = std::stod(argv[++i]);
+        else if (a == "--break-follow" && i + 1 < argc)
+            brkB = std::stod(argv[++i]) * k::R;
+        else if (a == "--depth" && i + 1 < argc)
+            planDepth = std::stoi(argv[++i]);
+        else if (a == "--beam" && i + 1 < argc)
+            planBeamK = std::stoi(argv[++i]);
+        else if (a == "--break-aim-sigma" && i + 1 < argc)
+            brkAimSigma = std::stod(argv[++i]);
+        else if (a == "--break-speed-sigma" && i + 1 < argc)
+            brkSpeedSigma = std::stod(argv[++i]);
     }
+    // Match planner's MC noise to execution noise so the planner's
+    // ranking of "noise-robust" candidates uses the correct distribution.
+    setUseMcScoring(useBr1, br1Samples, execAimSigma, execSpeedSigma);
+    setUseRescueShots(useBr2, br2Samples, br2MinPot);
 
     // Production-grade difficulty table (mirrors RO-4); built once.
     difficultyMut().buildOrLoad("difficulty_br.bin", 80);
 
-    const BreakSpec brk;
+    BreakSpec brk;
+    brk.cueX  = brkCueX;
+    brk.cueZ  = brkCueZ;
+    brk.aimDz = brkAimDz;
+    brk.speed = brkSpeed;
+    brk.a     = brkA;
+    brk.b     = brkB;
     std::vector<Trial> trials;
     trials.reserve(TRIALS);
     int cleared = 0, golden = 0, illegal = 0, scratch = 0, miss = 0;
@@ -255,13 +317,14 @@ int main(int argc, char** argv) {
                              t, w.balls[cueIdx(w)].r.x,
                              w.balls[cueIdx(w)].r.z,
                              w.balls[1].r.x, w.balls[1].r.z);
-                RunOutPlan p0 = planRunOut(w, 2, 3);
+                RunOutPlan p0 = planRunOut(w, planDepth, planBeamK);
                 std::fprintf(stderr,
                     "  planRunOut: defensive=%d target=%d value=%.4f\n",
                     p0.defensive ? 1 : 0, p0.shot.targetId, p0.value);
             }
         } else {
-            BreakOutcome bo = doBreak(w, brk, rng);
+            BreakOutcome bo = doBreak(w, brk, rng, brkAimSigma,
+                                      brkSpeedSigma);
             tr.legalBreak = bo.legal;
             tr.nineOnBreak = bo.nineOnBreak;
             tr.ballsPottedOnBreak = bo.ballsPotted;
@@ -286,14 +349,14 @@ int main(int argc, char** argv) {
         // execution noise. Stop on rack clear, miss, scratch, foul, or
         // shot cap.
         const int ci = cueIdx(w);
-        std::normal_distribution<double> nA(0.0, k::AIM_SIGMA);
-        std::normal_distribution<double> nS(0.0, k::SPEED_SIGMA);
+        std::normal_distribution<double> nA(0.0, execAimSigma);
+        std::normal_distribution<double> nS(0.0, execSpeedSigma);
         bool resolved = false;
         for (int s = 0; s < SHOT_CAP; ++s) {
             const int tgt = legalTarget(w.balls);
             if (tgt < 0) { tr.terminal = TerminalCause::Cleared;
                            ++cleared; resolved = true; break; }
-            RunOutPlan p = planRunOut(w, 2, 3);
+            RunOutPlan p = planRunOut(w, planDepth, planBeamK);
             if (p.defensive || p.shot.targetId < 0) {
                 tr.terminal = TerminalCause::SafetyBail;
                 ++bail;
@@ -371,9 +434,21 @@ int main(int argc, char** argv) {
                     brk.a, brk.b);
     }
     std::printf("noise: AIM_SIGMA=%.4f rad, SPEED_SIGMA=%.2f, jitter "
-                "<=0.3 mm\n", k::AIM_SIGMA, k::SPEED_SIGMA);
-    std::printf("trials: %d, shot-cap: %d, seed-base: %u\n\n",
+                "<=0.3 mm (break)\n", k::AIM_SIGMA, k::SPEED_SIGMA);
+    if (execAimSigma != k::AIM_SIGMA || execSpeedSigma != k::SPEED_SIGMA)
+        std::printf("noise: AIM_SIGMA=%.4f rad, SPEED_SIGMA=%.4f "
+                    "(run-out OVERRIDE)\n", execAimSigma, execSpeedSigma);
+    std::printf("trials: %d, shot-cap: %d, seed-base: %u\n",
                 TRIALS, SHOT_CAP, SEED_BASE);
+    std::printf("BR-1 (MC scoring): %s%s\n",
+                useBr1 ? "ON" : "off",
+                useBr1 ? (" (samples=" + std::to_string(br1Samples) +
+                          ")").c_str() : "");
+    std::printf("BR-2 (rescue shots): %s%s\n\n",
+                useBr2 ? "ON" : "off",
+                useBr2 ? (" (samples=" + std::to_string(br2Samples) +
+                          ", min-pot=" + std::to_string(br2MinPot) +
+                          ")").c_str() : "");
 
     std::printf("=== headline ===\n");
     if (!ballInHand) {
