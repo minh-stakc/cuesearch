@@ -70,16 +70,43 @@ sits in the rack centre and the cue can't strike it directly. The
 search rediscovered this from physics alone, with no human-coded
 heuristic.
 
-**P(gold) = 1.1 %** (verified, 11/1000 trials at the optimum). The
+**P(gold) = 1.7 %** (verified, 17/1000 trials at the optimum). The
 search's first-pass point estimate was 4.0 % with CI [2.0 %, 7.7 %];
-a 1000-seed unbiased re-evaluation at the winning cell measured 1.1 %.
-The ~4× shrinkage is **stage-1 selection bias** — picking the
-single-best cell of 2025 inflates its sampled rate. The honest 1.1 %
-lands in the same single-digit-percent territory as observed pro
-tournament rates: golden breaks are *rare in real life too*. The
-methodology surfaced its own bias (advisor-flagged before the gif was
-rendered) rather than shipping the inflated number; that's the
-contribution.
+a 1000-seed unbiased re-evaluation at the winning cell measured 1.7 %.
+The ~2× shrinkage is **stage-1 selection bias** — picking the
+single-best cell of 2025 inflates its sampled rate. The honest 1.7 %
+lands in single-digit-percent territory consistent with observed pro
+tournament golden-break rates: even at the optimum, the shot is *rare
+in real life too*. The methodology surfaced its own bias (advisor-
+flagged before the gif was rendered) rather than shipping the inflated
+number; that's the contribution.
+
+Two real engine bugs were caught and fixed while validating the gif
+that the user reported as showing balls passing through each other:
+
+- **`engine/world.cpp`** ball-ball pair gate. The pair-level skip
+  `if (!moving(seg[a].state)) continue` skipped a whole pair whenever
+  the lower-indexed ball was non-moving — a moving ball at higher
+  index never got to test against a Stationary/Spinning ball at lower
+  index. Changed to: skip only when BOTH are non-moving.
+- **`engine/resolve_ballball.cpp`** vertical impulse leak. The
+  ball-ball friction model applied `dP2 / m` to `vA.z` / `vB.z`
+  (world-Y, vertical) on every sub-step. The engine has no airborne
+  state — the slate absorbs vertical translational impulse — but the
+  code was leaking it. Across the multi-ball cluster cascade at the
+  break impact (t ≈ 0.12 s), the cue accumulated `vy ≈ -0.13` m/s
+  and the apex ball accumulated `vy ≈ +0.16` m/s. By t ≈ 2 s the
+  y-separation alone (~10 cm) exceeded 2R, so the ball-ball quartic
+  forever returned NaN and balls passed through each other in x-z.
+  Dropped the translational vy update; kept the angular coupling
+  (`gs * dP2` torque update) which is physically real.
+
+Both fixes are validated by the 22-suite regression battery
+(`leave_tests` was updated to measure the leave from the FIRST ball-
+ball collision only — the prior version's reliance on a returning
+cushion-bounced object ball was a compensating-bug effect of the
+vertical leak). After the fixes, min ball-pair distance over a full
+break is **0.9989 diameters** (≈ touching, as physics requires).
 
 The optimal break replayed (the first verified-golden seed, one of the
 ~1 % of executions that pocket the 9 — the 9 goes in, cue stays on the

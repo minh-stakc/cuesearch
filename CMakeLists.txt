@@ -141,3 +141,15 @@ target_link_options(match PRIVATE -static -static-libgcc -static-libstdc++)
 add_executable(golden_break tools/golden_break.cpp)
 target_link_libraries(golden_break PRIVATE cuesearch_engine)
 target_link_options(golden_break PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(dump_events tools/dump_events.cpp)
+target_link_libraries(dump_events PRIVATE cuesearch_engine)
+target_link_options(dump_events PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(probe_leave tools/probe_leave.cpp)
+target_link_libraries(probe_leave PRIVATE cuesearch_engine)
+target_link_options(probe_leave PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(trace_motion tools/trace_motion.cpp)
+target_link_libraries(trace_motion PRIVATE cuesearch_engine)
+target_link_options(trace_motion PRIVATE -static -static-libgcc -static-libstdc++)

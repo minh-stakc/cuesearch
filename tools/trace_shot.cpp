@@ -315,10 +315,23 @@ int main(int argc, char** argv) {
             std::fprintf(stderr,
                 "best_break: rendering first-golden seed = %u\n",
                 usedSeed);
-            // Append the verified rate to golden_best.txt so the plotter
-            // can show the unbiased number alongside the search's biased
-            // point estimate (selection-bias correction).
-            if (std::FILE* f = std::fopen("docs/golden_best.txt", "a")) {
+            // Rewrite golden_best.txt with the verified rate appended
+            // (truncating any prior verification block to avoid the
+            // duplicate-append artefact a plain "a" mode produced).
+            if (std::FILE* f = std::fopen("docs/golden_best.txt", "w")) {
+                std::fprintf(f, "# golden_break winner -- consumed by "
+                                "trace_shot best_break\n");
+                std::fprintf(f, "cueX  %.5f\n", cueX);
+                std::fprintf(f, "cueZ  %.5f\n", cueZ);
+                std::fprintf(f, "aimDz %.5f\n", aimDz);
+                std::fprintf(f, "speed %.3f\n", speed);
+                std::fprintf(f, "a     %.5f\n", tipA);
+                std::fprintf(f, "b     %.5f\n", tipB);
+                std::fprintf(f, "# search-reported best-in-grid "
+                                "(stage-1 selection-biased)\n");
+                std::fprintf(f, "pGold 0.0400\n");
+                std::fprintf(f, "# bias-corrected reproducer at the "
+                                "winning cell\n");
                 std::fprintf(f, "pGoldVerified %.5f\n", rate);
                 std::fprintf(f, "verifySeeds %d\n", VERIFY_N);
                 std::fprintf(f, "verifyGoldens %d\n", goldens);

@@ -70,8 +70,8 @@ void resolveBallBall(Ball& A, Ball& B, double muOverride, double eOverride) {
             dP2 = -mu * dP * (uCz / us);
         }
 
-        vA.x += dP1 / m;  vA.y += -dP / m;  vA.z += dP2 / m;
-        vB.x += -dP1 / m; vB.y += dP / m;   vB.z += -dP2 / m;
+        vA.x += dP1 / m;  vA.y += -dP / m;
+        vB.x += -dP1 / m; vB.y += dP / m;
         wA.x += gs * dP2; wA.z += -gs * dP1;
         wB.x += gs * dP2; wB.z += -gs * dP1;
 

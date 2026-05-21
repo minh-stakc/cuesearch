@@ -115,11 +115,21 @@ double World::run(
         }
 
         // Ball-ball: |D0 + D1 s + D2 s^2|^2 = (2R)^2  (quartic in s).
+        // PAIR-LEVEL "at least one moving" gate. Skipping the pair when
+        // only `a` is non-moving was a real bug: with unordered pairs
+        // (a < b), a moving ball at higher index never tested against a
+        // non-moving ball at lower index, so a Sliding/Rolling ball
+        // could pass clean through a Stationary/Spinning ball whose
+        // index was lower. Surfaced as visible overlap in break-shot
+        // traces (e.g. cue at distance 0.185 diameters from a momen-
+        // tarily-non-moving ball with no collision response).
         const double dd = (2.0 * k::R) * (2.0 * k::R);
         for (int a = 0; a < n; ++a) {
-            if (balls[a].pocketed || !moving(seg[a].state)) continue;
+            if (balls[a].pocketed) continue;
             for (int b = a + 1; b < n; ++b) {
                 if (balls[b].pocketed) continue;
+                if (!moving(seg[a].state) && !moving(seg[b].state))
+                    continue;
                 const Vec3 D0 = p0[a] - p0[b];
                 const Vec3 D1 = p1[a] - p1[b];
                 const Vec3 D2 = p2[a] - p2[b];

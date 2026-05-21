@@ -33,6 +33,13 @@ TEST_CASE("leave A: a rolling ball stops at v^2 / (2 mu_r g)") {
 }
 
 TEST_CASE("leave B: cue leave responds to spin (draw < stun < follow)") {
+    // The LEAVE is the cue's resting place from the FIRST ball-ball
+    // collision only. Letting simulateShot run to rest in the original
+    // 2-ball setup made the object cushion-bounce off the right rail
+    // and re-collide with the cue -- the measurement was dominated by
+    // that second collision, not by the spin's effect on the leave.
+    // Snapshot cue state at the first BallBall event, then propagate
+    // it through the cloth in isolation (no obstacles).
     auto leaveX = [](double b) {
         World w;
         Ball cue; cue.type = BallType::Cue; cue.id = 0;
@@ -41,8 +48,23 @@ TEST_CASE("leave B: cue leave responds to spin (draw < stun < follow)") {
         obj.r = {1.10, R, 0.635};           // straight, dead in line
         w.balls = {cue, obj};
         cueStrike(w.balls[0], Vec3{1, 0, 0}, 2.2, 0.0, b);
-        simulateShot(w);
-        return w.balls[0].r.x;              // cue resting x
+        Vec3 vAfter{}, wAfter{}, rAfter{};
+        bool got = false;
+        w.simulate([&](double, const WorldEvent& e,
+                       const std::vector<Ball>& bs) {
+            if (e.type == EventType::BallBall && !got) {
+                got = true;
+                vAfter = bs[0].v; wAfter = bs[0].w; rAfter = bs[0].r;
+            }
+        });
+        REQUIRE(got);
+        // Continue the cue alone (no object ball, so no second hit).
+        World w2;
+        Ball cue2; cue2.type = BallType::Cue; cue2.id = 0;
+        cue2.r = rAfter; cue2.v = vAfter; cue2.w = wAfter;
+        w2.balls = {cue2};
+        w2.simulate();
+        return w2.balls[0].r.x;
     };
     const double draw = leaveX(-0.30 * R);
     const double stun = leaveX(0.0);
