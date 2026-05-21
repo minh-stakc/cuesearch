@@ -43,21 +43,35 @@ def main() -> int:
             if px == T["xMax"] / 2 and pz not in (0, T["zMax"]):
                 continue
             ax.add_patch(plt.Circle((px, pz), T["pr"], color="black"))
+    # Real 9-ball colour palette (1=yellow, 2=blue, ..., 9=yellow-stripe).
+    PAL = {
+        0: "white", 1: "#f5c518", 2: "#2b6cb0", 3: "#c1272d", 4: "#6b3fa0",
+        5: "#e76f00", 6: "#1f7a3a", 7: "#7a1d1d", 8: "#1a1a1a",
+        9: "#f5c518",
+    }
     dots = {}
+    labels = {}
 
     def draw(i):
         for d in dots.values():
             d.remove()
+        for tx in labels.values():
+            tx.remove()
         dots.clear()
+        labels.clear()
         for b in frames[i]["b"]:
-            col = "white" if b["id"] == 0 else (
-                "gold" if b["id"] == 9 else "red")
+            col = PAL.get(b["id"], "red")
             c = plt.Circle((b["x"], b["z"]), R, color=col, ec="black",
                            zorder=3)
             ax.add_patch(c)
             dots[b["id"]] = c
+            if b["id"] != 0:
+                tx = ax.text(b["x"], b["z"], str(b["id"]), color="white",
+                             ha="center", va="center", fontsize=6,
+                             zorder=4)
+                labels[b["id"]] = tx
         ax.set_title(f"t = {frames[i]['t']:.2f}s")
-        return list(dots.values())
+        return list(dots.values()) + list(labels.values())
 
     step = max(1, len(frames) // 240)  # cap ~240 frames
     idx = list(range(0, len(frames), step))

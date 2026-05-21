@@ -26,11 +26,18 @@ Defensible contributions:
    on failure. The audit trail (commits predating each measurement) is
    the contribution — a faked SOTA number would be worth less.
 
-![runout](docs/runout.gif)  ![follow arc](docs/follow.gif)
+![runout](docs/runout.gif)
 
-*Left: the solver running out a 2-ball rack. Right: a post-collision
-follow arc (curves, then straightens) — frames are physically exact
-from the closed-form `Segment::at`, not interpolated.*
+*The solver clearing a 2-ball rack: plan → strike → settle → replan
+→ strike. Frames are physically exact from the closed-form
+`Segment::at`, not interpolated.*
+
+![break](docs/break.gif)
+
+*A 9-ball break: cue from the kitchen, hit the apex 1 a hair off-centre
+with light follow at ~9 m/s. Ball–ball collisions are exact quartic
+roots; the spread is what the physics actually produces, not a tuned
+particle system.*
 
 ## Why event-based (the architectural argument)
 
