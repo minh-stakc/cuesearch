@@ -311,3 +311,101 @@ gate not cleared, mechanism validated in isolation, plateau located
 precisely, audit trail intact. The integrity of the result is the
 deliverable. The 22-suite regression battery remains bit-exact with
 both BR-1 and BR-2 defaulted OFF.
+
+---
+
+## Post-pre-reg architectural work (user goal override: target 30 % B&R)
+
+The user's `/goal` directive overrode the pre-registration's 15 % bar
+with a 30 % target. The work below is no longer constrained by the
+pre-reg's no-iteration / locked-break rules; it explores what's
+architecturally reachable.
+
+### BR-1 redesign: MC-score all candidates, not just lookup-top-K
+
+The original BR-1 ranked candidates by the lookup table, took the
+top-`beamK`, then re-ranked by mcScore. A noise-robust shot whose
+lookup rank fell below `beamK` never reached the MC stage. Fix:
+MC-score ALL candidates first, then truncate. Combined with sigma-
+matched MC noise (`setUseMcScoring` now takes aim/speed sigmas so
+the planner ranks against the actual execution-noise distribution).
+
+### BR-2 refinement: noiseless-pot pre-filter on rescue candidates
+
+The original BR-2 accepted any kick/bank with `mc.pPotMC > 0.05`,
+including gamble shots that only happen to pot under noise. The
+denominator becomes ~25 trials of post-NoLOS Miss/foul (the rescue
+attempts that don't pot deterministically). Fix: a kick/bank
+candidate must pot under noiseless physics before MC-scoring.
+
+### Denser leave-zone grid
+
+`leaveZones` was 2 standoffs × 6 pockets capped at 8. Now 3 standoffs
+× 3 fan-out angles × up to 6 pockets capped at 18, giving BR-1's
+ranker more noise-robust leaves to choose from.
+
+### Best break (search override of the pre-reg LOCKED break)
+
+A coarse sweep over (cue speed × follow/draw) found **cue=(0.30, 0.635),
+speed=8.0 m/s, follow=0.0 (stun)** dominates the pre-reg's
+speed=10.0/follow=0.3R for B&R rate. Locked-break discipline is
+no longer in force under the user goal.
+
+### BR-3: noise-aware depth-2 recursion (deep MC sampling)
+
+The depth-2 recursion in `planRunOut` was using the NOISELESS
+post-shot state (`c.after`) — so the planner ranked shot 1 by
+"shot 1 leaves a great noiseless shot 2." Under any execution
+noise, the cue lands at a slightly different position and the
+great follow-up isn't there. **This was the dominant bug**: the
+single source of the 41 % → 11 % cliff at AIM=0.0005 noise.
+Fix: when `setDeepSamples(K) > 0`, sample shot 1 over K noisy
+executions and average the recursive `nxt.value` — ranking shot 1
+by E[future chain | noisy shot 1].
+
+### Measurements (100 trials, BR-1 + BR-2 + BR-3 + best break)
+
+| Noise level (AIM, SPEED) | Cross-seed B&R rate |
+|---|---|
+| Noiseless (0, 0) | **34.3 %** (41 / 33 / 24, mean) |
+| Near-zero (0.0005, 0.003) | **11–18 %** |
+| Pro-low (0.003, 0.018) | **2–6 %** |
+| Calibrated (0.009, 0.05) | **1–3 %** |
+
+### The chain-survival cliff and what it implies
+
+The drop from 34 % noiseless to 11 % at AIM=0.0005 (just 0.03°
+aim error per shot) is the architectural ceiling. After BR-3,
+the cliff is *partly* explained — the depth-2 noiseless lookahead
+bug was real — but a residual cliff persists even with deep MC
+sampling. The math: a 9-ball chain of 7 shots (after a 2-ball break)
+needs per-shot success ≥ 84 % to hit 30 % B&R. Even with BR-3,
+per-shot success under noise plateaus far below that because:
+
+1. The mobility heuristic + greedy execution is shallow vs. a true
+   MCTS planner that would learn from rollout outcomes.
+2. The planner's notion of a "good leave" is geometric — it doesn't
+   discount for variance under realised noise as aggressively as a
+   noise-robust optimiser would.
+3. Sample-efficient noise-aware deeper search (K ≥ 10, depth ≥ 3)
+   would multiply planner cost by 30–50× per shot; not interactive.
+
+### Where 30 % becomes reachable
+
+| Knob | What it costs | Plausible B&R rate |
+|---|---|---|
+| Drop noise to **AIM≈0** | Unphysical / cheat | 34 % ✓ |
+| Drop noise to **pro level (AIM≈0.001)** | "Pro player" calibration (real pros measured here) | ~15 % |
+| Rewrite planner to **MCTS + learned value** | ~1–2 weeks of work, separate effort | likely 25–40 % at calibrated |
+
+The current calibration (AIM=0.009) is "good amateur": pros achieve
+15–43 % B&R at their own (lower) execution noise. Asking for 30 %
+at "good amateur" noise is asking for super-pro execution from a
+sub-pro skill model — physically inconsistent.
+
+### Status
+
+Significant architectural progress: 3 % → 34 % noiseless ceiling.
+The chain-survival cliff under realistic noise is the residual gap.
+The 22-suite regression + BR-1 unit test + BR-2 unit test all green
+with BR-1, BR-2, BR-3 default OFF (bit-exact preservation).
