@@ -9,8 +9,4 @@ pGold 0.0400
 pGoldVerified 0.01100
 verifySeeds 1000
 verifyGoldens 11
-renderSeed 130
-pGoldVerified 0.01100
-verifySeeds 1000
-verifyGoldens 11
-renderSeed 130
+renderSeed 186

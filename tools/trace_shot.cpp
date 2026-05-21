@@ -224,8 +224,15 @@ int main(int argc, char** argv) {
                     "./build/golden_break first\n");
                 return 2;
             }
-            std::string key; double val;
-            while (in >> key >> val) {
+            // Parse line-by-line; skip comments and blanks. (The
+            // previous `in >> key >> val` form choked on the `#` header
+            // line and silently fell back to default cue placement.)
+            std::string line;
+            while (std::getline(in, line)) {
+                if (line.empty() || line[0] == '#') continue;
+                std::istringstream iss(line);
+                std::string key; double val;
+                if (!(iss >> key >> val)) continue;
                 if (key == "cueX")       cueX  = val;
                 else if (key == "cueZ")  cueZ  = val;
                 else if (key == "aimDz") aimDz = val;
@@ -233,6 +240,10 @@ int main(int argc, char** argv) {
                 else if (key == "a")     tipA  = val;
                 else if (key == "b")     tipB  = val;
             }
+            std::fprintf(stderr,
+                "best_break: parsed cueX=%.4f cueZ=%.4f aimDz=%.5f "
+                "speed=%.2f a=%.5f b=%.5f\n",
+                cueX, cueZ, aimDz, speed, tipA, tipB);
             addNoise = true;
         }
         // Helper: build the break + apply strike at seed s. Mirrors

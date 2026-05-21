@@ -81,8 +81,9 @@ methodology surfaced its own bias (advisor-flagged before the gif was
 rendered) rather than shipping the inflated number; that's the
 contribution.
 
-The optimal break replayed (seed-130, one of the verified golden 1.1 %
-outcomes — the 9 pockets at t ≈ 9.6 s, no scratch):
+The optimal break replayed (the first verified-golden seed, one of the
+~1 % of executions that pocket the 9 — the 9 goes in, cue stays on the
+table):
 
 ![best break](docs/best_break.gif)
 
