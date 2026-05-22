@@ -163,3 +163,7 @@ target_link_options(trace_motion PRIVATE -static -static-libgcc -static-libstdc+
 add_executable(break_and_run tools/break_and_run.cpp)
 target_link_libraries(break_and_run PRIVATE cuesearch_solver)
 target_link_options(break_and_run PRIVATE -static -static-libgcc -static-libstdc++)
+
+add_executable(trace_br tools/trace_br.cpp)
+target_link_libraries(trace_br PRIVATE cuesearch_solver)
+target_link_options(trace_br PRIVATE -static -static-libgcc -static-libstdc++)

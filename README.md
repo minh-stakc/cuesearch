@@ -39,6 +39,17 @@ with light follow at ~9 m/s. Ball–ball collisions are exact quartic
 roots; the spread is what the physics actually produces, not a tuned
 particle system.*
 
+![break and run](docs/break_and_run.gif)
+
+*Break-and-run on seed 7009: break (0 balls potted) → run the rack 1
+through 9 in order. Search-found break (cue at 0.55, 1.00; speed
+8 m/s; slight off-apex), pro-low aim noise (AIM_SIGMA = 0.001), and
+the BR-1 + BR-2 planner stack. The full end-to-end measured rate is
+14 % across seeds at this noise — short of the 30 % target but a real
+4×+ improvement over the 3 % pre-registration baseline. The
+chain-survival ceiling and the named-lever roadmap are documented in
+[`docs/BREAK_AND_RUN.md`](docs/BREAK_AND_RUN.md).*
+
 ### Golden-break parameter search
 
 A "golden break" pots the 9 on the break shot — instant win in 9-ball
