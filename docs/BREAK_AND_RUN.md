@@ -431,18 +431,61 @@ exceed 15 % at AIM=0.001, MCTS would need to fire at EVERY shot
 inside the rollout). MCTS-at-every-shot costs O(K^depth) per trial
 and isn't interactively tunable from this scaffold.
 
+### BR-5: MCTS at every shot (regression)
+
+Extending MCTS from shot-1 to every shot in the trial (with adaptive
+rollout depth) made the planner WORSE: with K=12 rollouts and per-shot
+chain success ~10 %, ~30 % of candidates get 0/12 clears by sampling
+noise alone, and the planner ends up bailing LowValue at 60-80 % of
+shots even with a lookup-lvl1 fallback. Net result: 0/20 cleared in
+54 minutes per test. MCTS-at-every-shot needs K >= 30 for stable
+estimates -- multi-hour tests per cell, not interactively tunable.
+
+### BR-6: B&R-targeting break search
+
+100-cell sweep over (cueX, cueZ, aim-dz) at AIM=0.001 with BR-1+BR-2
+enabled, 20 trials per cell. Top-5 candidates refined with 100
+trials x 3 seeds:
+
+| Break (cueX, cueZ, aim-dz) | Mean B&R |
+|---|---|
+| (0.55, 1.00, -0.02) | **14.3 %** (16/13/14) |
+| (0.40, 0.635, +0.02) | 12.0 % (13/11/12) |
+| (0.40, 1.00, 0) | 10.7 % |
+| (0.55, 0.30, +0.02) | 10.0 % |
+| (0.40, 0.635, -0.02) | 9.0 % |
+
+Best break = "cue at the head-string corner near the long-rail side,
+slight off-apex hit." Lifts the floor from the (0.30, 0.635, 0) /
+10 % default to 14 % -- a real +4 pp -- but the per-shot-success
+math still bounds the ceiling near 16 % at AIM=0.001.
+
 ### Final status
 
-- Baseline (committed pre-reg): 3 % B&R
-- After BR-2 + BR-1 MC-all + sigma-match + expanded zones + best break +
-  BR-3 deep MC + BR-4 MCTS-shot-1: 13 % at AIM=0.001 (pro-low noise)
-- Noiseless ceiling: 34 % mean (above 30 %)
-- 22-suite regression + BR-1 unit test + BR-2 unit test all green with
-  every BR knob default OFF (bit-exact preservation).
+| Stage | B&R rate |
+|---|---|
+| Pre-reg baseline (BR off, locked break) | 3 % |
+| After BR-1 + BR-2 + sigma-match + expanded zones | 3 % @ calibrated, 10 % @ AIM=0.001 |
+| + BR-3 deep MC (K=4) | ~unchanged |
+| + BR-4 MCTS-shot-1 (K=8) | 13 % @ AIM=0.001 |
+| + BR-6 best break (0.55, 1.00, -0.02) | **14.3 % @ AIM=0.001** |
+| Noiseless ceiling (AIM=0) | **34 %** mean |
+| Targets / references | 30 % goal (user); 15-43 % pro tournament |
 
-The 30 % B&R goal at realistic execution noise was not reached.
-The architectural ceiling is structural: greedy continuation (whether
-inside MCTS rollouts or in actual execution) caps per-shot success
-below what's needed for 30 % chains. A full MCTS-at-every-shot or
-learned value function would be the next architectural lever, on
-the order of a week of focused work + tuning beyond this commit.
+The 30 % B&R goal at AIM=0.001 (pro-low noise) was NOT reached.
+The architectural ceiling at this noise level is ~16 %: per-shot
+chain success rate is bounded near 78 % (post-leave noise pulls cue
+away from the planned leave; mc.valueMC averaging doesn't fully
+recover), and 0.78^7 = 16 %.
+
+What would close the gap to 30 %, in roughly increasing cost order:
+- Calibrate noise lower (AIM ~ 0.0001 -> 16 %; AIM = 0 -> 34 %).
+  Defensible only as "perfect-execution" upper bound; AIM=0 isn't a
+  real player skill.
+- Real MCTS at every shot with K >= 30 + UCB selection + tree
+  caching (multi-day work, hours per validation run).
+- Learned value function (AlphaGo-style): per-state estimator trained
+  on rollout data, replacing the mobility heuristic. Multi-week work.
+
+The 22-suite regression + BR-1 unit test + BR-2 unit test all green
+with every BR knob default OFF (bit-exact preservation).
