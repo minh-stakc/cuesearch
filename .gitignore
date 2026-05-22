@@ -2,3 +2,6 @@ build/
 .cache/
 compile_commands.json
 *.json
+difficulty_*.bin
+cuesearch_mem.txt
+docs/break_and_run.csv

@@ -103,4 +103,12 @@ void setUseRescueShots(bool on, int nSamples = 16,
 // noisy shot 1]. Default 0 (off), preserves the 22-suite regression.
 void setDeepSamples(int nSamples);
 
+// BR-4 (MCTS): for each shot-1 candidate, run K rollouts (execute the
+// candidate under noise, then continue greedy until rack clears or
+// chain fails). Score by clear rate. Replaces the mobility-heuristic
+// ranker with a direct end-to-end chain-success estimator. When
+// nRollouts > 0, the planner uses MCTS scoring instead of mc.valueMC
+// for ranking; nDepth caps the rollout shot count. Default 0 (off).
+void setMctsRollouts(int nRollouts, int nDepth = 8);
+
 }  // namespace cue

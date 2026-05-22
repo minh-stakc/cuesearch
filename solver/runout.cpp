@@ -309,6 +309,13 @@ double g_rescueMinPot = 0.05;
 // "chain value if shot 1 executes perfectly." Default 0 (preserves
 // the bit-exact noiseless-recursion behaviour for the 22-suite battery).
 int g_deepSamples = 0;
+// BR-4 (MCTS): rollout-based candidate scoring. When > 0, each shot-1
+// candidate is scored by P(full-chain clear over K noisy rollouts) --
+// the direct end-to-end estimator, not a heuristic. Inside the rollout,
+// the post-shot-1 chain is executed greedily (planRunOut with
+// depth=1, no MCTS recursion, no further BR-4) up to g_mctsDepth shots.
+int g_mctsRollouts = 0;
+int g_mctsDepth = 8;
 
 // BR-2 helper: build Kick/Bank rescue candidates for legal target `t`
 // by reusing solver/solver.cpp::candidateShots (which generates the
@@ -327,6 +334,80 @@ std::vector<ShotEval> rescueCandidates(const World& w, int t) {
     }
     return out;
 }
+}  // namespace
+
+namespace {
+
+// BR-4 helper: run K noisy rollouts of `shot1` from world w, continuing
+// greedily up to `maxDepth` shots, return the clear rate. Inner planner
+// is greedy (no BR-1/BR-2/BR-4) so cost stays bounded.
+double mctsRolloutScore(const World& w, const ShotEval& shot1,
+                        int K, int maxDepth, double aimSigma,
+                        double speedSigma, unsigned baseSeed) {
+    int cleared = 0;
+    const int ciOuter = cueIdx(w.balls);
+    if (ciOuter < 0) return 0.0;
+    // Disable nested MCTS (would explode cost), keep BR-1 / BR-2
+    // active so the rollout continuation matches what the harness
+    // actually executes. The rollout cost stays bounded by
+    // g_mctsDepth -- with BR-1 each inner planRunOut is ~150 ms,
+    // dominated by candidate generation, not MC scoring.
+    int savedMcts = g_mctsRollouts;
+    g_mctsRollouts = 0;
+
+    for (int r = 0; r < K; ++r) {
+        std::mt19937 rng(baseSeed * 2654435761u + (unsigned)r);
+        std::normal_distribution<double> nA(0.0, aimSigma);
+        std::normal_distribution<double> nS(0.0, speedSigma);
+
+        World wr = w;
+        // Execute shot 1 under noise.
+        const double th = nA(rng), co = std::cos(th), si = std::sin(th);
+        const Vec3 aim{shot1.shot.aim.x * co + shot1.shot.aim.z * si, 0.0,
+                       -shot1.shot.aim.x * si + shot1.shot.aim.z * co};
+        const double v = shot1.shot.speed * (1.0 + nS(rng));
+        cueStrike(wr.balls[ciOuter], aim, v, shot1.shot.a, shot1.shot.b);
+        ShotOutcome o = simulateShot(wr);
+        if (o.foul != Foul::None) continue;
+        bool potted = false;
+        for (int id : o.pocketed)
+            if (id == shot1.targetId) potted = true;
+        if (!potted) continue;
+        if (o.won) { ++cleared; continue; }
+        if (legalTarget(wr.balls) < 0) { ++cleared; continue; }
+
+        // Greedy chain continuation. Each iteration: plan, execute
+        // under noise, check pot. Bail on miss/foul/defensive.
+        bool chained = true;
+        for (int d = 1; d < maxDepth; ++d) {
+            const int tgt = legalTarget(wr.balls);
+            if (tgt < 0) break;
+            RunOutPlan p = planRunOut(wr, 1, 3);
+            if (p.defensive || p.shot.targetId < 0) { chained = false; break; }
+            const int ci2 = cueIdx(wr.balls);
+            const double th2 = nA(rng);
+            const double co2 = std::cos(th2), si2 = std::sin(th2);
+            const Vec3 aim2{p.shot.shot.aim.x * co2 + p.shot.shot.aim.z * si2,
+                            0.0,
+                            -p.shot.shot.aim.x * si2 +
+                                p.shot.shot.aim.z * co2};
+            const double v2 = p.shot.shot.speed * (1.0 + nS(rng));
+            cueStrike(wr.balls[ci2], aim2, v2,
+                      p.shot.shot.a, p.shot.shot.b);
+            ShotOutcome o2 = simulateShot(wr);
+            if (o2.foul != Foul::None) { chained = false; break; }
+            if (o2.won) break;
+            bool potted2 = false;
+            for (int id : o2.pocketed) if (id == tgt) potted2 = true;
+            if (!potted2) { chained = false; break; }
+        }
+        if (chained && legalTarget(wr.balls) < 0) ++cleared;
+    }
+
+    g_mctsRollouts = savedMcts;
+    return (double)cleared / K;
+}
+
 }  // namespace
 
 RunOutPlan planRunOut(const World& w, int depth, int beamK) {
@@ -436,7 +517,32 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
     // the survivors of the beamK cut are the MC-best, not the
     // lookup-best -- exactly the candidates whose chain continues
     // under noise.
-    if (g_useMc) {
+    if (g_mctsRollouts > 0) {
+        // BR-4: rank candidates by end-to-end rollout clear rate. The
+        // heuristic ranker (mc.valueMC) and the depth-2 recursion are
+        // bypassed -- the rollouts ARE the planner. Pre-filter to the
+        // top `2*beamK` lookup candidates so MCTS cost stays bounded;
+        // those that survive get the full rollout treatment. Inner
+        // rollouts use greedy continuation; chain cost bounded by
+        // g_mctsDepth.
+        std::sort(cands.begin(), cands.end(),
+                  [](const Cand& a, const Cand& b) {
+                      return a.lvl1 > b.lvl1;
+                  });
+        const int prefilter = std::max(beamK, 2 * beamK);
+        if ((int)cands.size() > prefilter) cands.resize(prefilter);
+        for (size_t i = 0; i < cands.size(); ++i) {
+            Cand& c = cands[i];
+            const unsigned seed = (unsigned)((c.shot.targetId * 1009 +
+                                              c.shot.pocket * 17 +
+                                              (int)i * 31) | 1u);
+            const double clearRate =
+                mctsRolloutScore(w, c.shot, g_mctsRollouts, g_mctsDepth,
+                                 g_mcAimSigma, g_mcSpeedSigma, seed);
+            c.pPot = clearRate;
+            c.lvl1 = clearRate;
+        }
+    } else if (g_useMc) {
         for (size_t i = 0; i < cands.size(); ++i) {
             Cand& c = cands[i];
             const unsigned seed = (unsigned)((c.shot.targetId * 1009 +
@@ -461,7 +567,11 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
     double best = -1.0;
     for (Cand& c : cands) {
         double v;
-        if (depth <= 1 || legalTarget(c.after.balls) < 0) {
+        // MCTS rollout score already encodes the full-chain value;
+        // skip the depth-2 recursion (it would either duplicate the
+        // rollout work or, worse, invoke nested MCTS on c.after).
+        if (g_mctsRollouts > 0 || depth <= 1 ||
+            legalTarget(c.after.balls) < 0) {
             v = c.lvl1;
         } else if (g_deepSamples > 0) {
             double sum = 0.0;
@@ -523,6 +633,11 @@ void setUseMcScoring(bool on, int nSamples, double aimSigma,
 
 void setDeepSamples(int nSamples) {
     g_deepSamples = std::max(0, nSamples);
+}
+
+void setMctsRollouts(int nRollouts, int nDepth) {
+    g_mctsRollouts = std::max(0, nRollouts);
+    g_mctsDepth = std::max(2, nDepth);
 }
 
 void setUseRescueShots(bool on, int nSamples, double minPotMC) {

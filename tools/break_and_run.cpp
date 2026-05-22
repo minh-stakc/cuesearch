@@ -219,6 +219,8 @@ int main(int argc, char** argv) {
     int br2Samples = 16;
     double br2MinPot = 0.05;
     int deepSamples = 0;
+    int mctsRollouts = 0;
+    int mctsDepth = 8;
     double execAimSigma = k::AIM_SIGMA;
     double execSpeedSigma = k::SPEED_SIGMA;
     double brkAimSigma = k::AIM_SIGMA;
@@ -277,12 +279,17 @@ int main(int argc, char** argv) {
             brkSpeedSigma = std::stod(argv[++i]);
         else if (a == "--deep" && i + 1 < argc)
             deepSamples = std::stoi(argv[++i]);
+        else if (a == "--mcts" && i + 1 < argc)
+            mctsRollouts = std::stoi(argv[++i]);
+        else if (a == "--mcts-depth" && i + 1 < argc)
+            mctsDepth = std::stoi(argv[++i]);
     }
     // Match planner's MC noise to execution noise so the planner's
     // ranking of "noise-robust" candidates uses the correct distribution.
     setUseMcScoring(useBr1, br1Samples, execAimSigma, execSpeedSigma);
     setUseRescueShots(useBr2, br2Samples, br2MinPot);
     setDeepSamples(deepSamples);
+    setMctsRollouts(mctsRollouts, mctsDepth);
 
     // Production-grade difficulty table (mirrors RO-4); built once.
     difficultyMut().buildOrLoad("difficulty_br.bin", 80);
@@ -360,6 +367,14 @@ int main(int argc, char** argv) {
             const int tgt = legalTarget(w.balls);
             if (tgt < 0) { tr.terminal = TerminalCause::Cleared;
                            ++cleared; resolved = true; break; }
+            // MCTS only on the FIRST shot (most chain length to plan
+            // through). Subsequent shots use the regular planner --
+            // by then the chain is shorter and the lookup heuristic
+            // is good enough. Saves ~7x compute per trial.
+            if (s == 0 && mctsRollouts > 0)
+                setMctsRollouts(mctsRollouts, mctsDepth);
+            else
+                setMctsRollouts(0, mctsDepth);
             RunOutPlan p = planRunOut(w, planDepth, planBeamK);
             if (p.defensive || p.shot.targetId < 0) {
                 tr.terminal = TerminalCause::SafetyBail;
