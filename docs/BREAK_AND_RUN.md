@@ -403,9 +403,46 @@ The current calibration (AIM=0.009) is "good amateur": pros achieve
 at "good amateur" noise is asking for super-pro execution from a
 sub-pro skill model — physically inconsistent.
 
-### Status
+### BR-4: MCTS-like rollout planner (user chose this path)
 
-Significant architectural progress: 3 % → 34 % noiseless ceiling.
-The chain-survival cliff under realistic noise is the residual gap.
-The 22-suite regression + BR-1 unit test + BR-2 unit test all green
-with BR-1, BR-2, BR-3 default OFF (bit-exact preservation).
+User selected the MCTS architectural rewrite over noise recalibration.
+Implementation: for each shot-1 candidate (top-2K by lookup pre-filter),
+run K noisy rollouts and continue greedy until clear or fail; score
+by clear rate. Subsequent shots use the regular BR-1+BR-2 planner --
+restricting MCTS to s=0 keeps trial cost bounded.
+
+Inner rollout continuation initially used pure greedy (no BR-1/BR-2);
+that gave 8 % at AIM=0.001 -- WORSE than greedy 10 % because the
+rollouts didn't match what the harness actually executes. Re-enabling
+BR-1+BR-2 inside rollouts brought it to **13 % (4/30 trials, 31 min
+runtime)** -- a real improvement but the CI is wide and the absolute
+result is still far below 30 %.
+
+### Why MCTS-at-shot-1 alone caps near 15 %
+
+The math is tight: per-shot success rate at AIM=0.001 noise is
+~75-80 % (measured from chain-length distribution). A 7-shot chain
+at 0.78^7 = 16 %, at 0.85^7 = 32 %. MCTS-at-shot-1 picks the shot
+whose chain ROLLOUTS clear most often -- which surfaces the
+*best of the available chains* but cannot change the per-shot
+success rate of the remaining 6 greedy shots. To meaningfully
+exceed 15 % at AIM=0.001, MCTS would need to fire at EVERY shot
+(or a learned value function would replace the greedy continuation
+inside the rollout). MCTS-at-every-shot costs O(K^depth) per trial
+and isn't interactively tunable from this scaffold.
+
+### Final status
+
+- Baseline (committed pre-reg): 3 % B&R
+- After BR-2 + BR-1 MC-all + sigma-match + expanded zones + best break +
+  BR-3 deep MC + BR-4 MCTS-shot-1: 13 % at AIM=0.001 (pro-low noise)
+- Noiseless ceiling: 34 % mean (above 30 %)
+- 22-suite regression + BR-1 unit test + BR-2 unit test all green with
+  every BR knob default OFF (bit-exact preservation).
+
+The 30 % B&R goal at realistic execution noise was not reached.
+The architectural ceiling is structural: greedy continuation (whether
+inside MCTS rollouts or in actual execution) caps per-shot success
+below what's needed for 30 % chains. A full MCTS-at-every-shot or
+learned value function would be the next architectural lever, on
+the order of a week of focused work + tuning beyond this commit.
