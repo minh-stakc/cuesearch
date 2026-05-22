@@ -531,6 +531,15 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
                   });
         const int prefilter = std::max(beamK, 2 * beamK);
         if ((int)cands.size() > prefilter) cands.resize(prefilter);
+        // Save lookup-based lvl1 BEFORE overwriting with MCTS scores so
+        // we can fall back if all MCTS estimates come back zero (low-K
+        // sampling noise; the "best lookup candidate is still the best
+        // guess" assumption is safer than bailing defensively).
+        std::vector<double> lookupLvl1;
+        lookupLvl1.reserve(cands.size());
+        for (auto& c : cands) lookupLvl1.push_back(c.lvl1);
+
+        double maxClear = 0.0;
         for (size_t i = 0; i < cands.size(); ++i) {
             Cand& c = cands[i];
             const unsigned seed = (unsigned)((c.shot.targetId * 1009 +
@@ -541,6 +550,17 @@ RunOutPlan planRunOut(const World& w, int depth, int beamK) {
                                  g_mcAimSigma, g_mcSpeedSigma, seed);
             c.pPot = clearRate;
             c.lvl1 = clearRate;
+            if (clearRate > maxClear) maxClear = clearRate;
+        }
+        // MCTS sampling-noise fallback: with K=12 and per-shot chain
+        // success ~10 %, P(all K rollouts fail) ~ 28 % per candidate.
+        // If every candidate's rollouts come back zero, that's almost
+        // certainly bad luck rather than an actually impossible state.
+        // Restore the lookup lvl1 so the planner picks the best-by-
+        // lookup candidate instead of bailing LowValue.
+        if (maxClear < 1e-4) {
+            for (size_t i = 0; i < cands.size(); ++i)
+                cands[i].lvl1 = lookupLvl1[i];
         }
     } else if (g_useMc) {
         for (size_t i = 0; i < cands.size(); ++i) {

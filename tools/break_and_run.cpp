@@ -367,14 +367,21 @@ int main(int argc, char** argv) {
             const int tgt = legalTarget(w.balls);
             if (tgt < 0) { tr.terminal = TerminalCause::Cleared;
                            ++cleared; resolved = true; break; }
-            // MCTS only on the FIRST shot (most chain length to plan
-            // through). Subsequent shots use the regular planner --
-            // by then the chain is shorter and the lookup heuristic
-            // is good enough. Saves ~7x compute per trial.
-            if (s == 0 && mctsRollouts > 0)
-                setMctsRollouts(mctsRollouts, mctsDepth);
-            else
+            // MCTS at every shot when --mcts > 0. Rollout depth is
+            // adaptive: it never needs to exceed the number of legal
+            // balls remaining (the chain stops then). Saves O(remaining)
+            // work on late shots without changing the result.
+            if (mctsRollouts > 0) {
+                int legalRemaining = 0;
+                for (const Ball& b : w.balls)
+                    if (b.type != BallType::Cue && !b.pocketed)
+                        ++legalRemaining;
+                const int adaptDepth =
+                    std::min(mctsDepth, std::max(2, legalRemaining));
+                setMctsRollouts(mctsRollouts, adaptDepth);
+            } else {
                 setMctsRollouts(0, mctsDepth);
+            }
             RunOutPlan p = planRunOut(w, planDepth, planBeamK);
             if (p.defensive || p.shot.targetId < 0) {
                 tr.terminal = TerminalCause::SafetyBail;
